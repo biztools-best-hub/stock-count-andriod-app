@@ -40,14 +40,12 @@ output.json
 *.kotlin_module
 
 # Gradle Wrapper logs
-.gradle/
 gradle-app.setting
 
 # NDK
 .cxx/
 
 # Kotlin build folders
-build/
 
 # Mac/Windows clutter
 *.swp
