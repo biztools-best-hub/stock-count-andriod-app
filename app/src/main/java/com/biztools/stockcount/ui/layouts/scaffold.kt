@@ -17,13 +17,13 @@ fun MainScaffold(
     bottomBarPresenter: BottomBarPresenter
 ) {
     Scaffold(
-        topBar = { topBarPresenter.render(null) },
-        bottomBar = { bottomBarPresenter.render(null) }) {
+        topBar = { topBarPresenter.Render() },
+        bottomBar = { bottomBarPresenter.Render() }) {
         Surface(
             Modifier
                 .fillMaxSize()
                 .padding(it)
-        ) { presenter.content() }
-        presenter.renderQR()
+        ) { presenter.Content() }
+        presenter.RenderQR()
     }
 }

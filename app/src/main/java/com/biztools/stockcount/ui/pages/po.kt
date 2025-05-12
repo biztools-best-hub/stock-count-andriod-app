@@ -106,7 +106,7 @@ fun Po(
     onUnauth: () -> Unit
 ) {
     val config = POConfigStore(ctx).config.collectAsState(initial = null).value
-    val device = SecurityStore(ctx).device.collectAsState(initial = null).value
+    val dev = SecurityStore(ctx).device.collectAsState(initial = null)
     val initializing = remember { mutableStateOf(true) }
     val barcode = remember { mutableStateOf<String?>(null) }
     val items = remember { mutableListOf<ExtendItemInfo>() }
@@ -156,7 +156,8 @@ fun Po(
             imageCapture.value = null
         }
     }
-    val checkItem: () -> Unit = {
+
+    fun checkItem(dev: String) {
         itemInfo.value = null
         qty.value = 1
         val invalid =
@@ -165,7 +166,7 @@ fun Po(
             checking.value = true
             showItem.value = true
             try {
-                val api = RestAPI.create<StockApi>(user!!.token, deviceId = device ?: "")
+                val api = RestAPI.create<StockApi>(user!!.token, deviceId = dev)
                 val call = api.checkItemInfoNonStrict(barcode.value!!)
                 RestAPI.execute(call, scope,
                     onSuccess = { r ->
@@ -188,12 +189,13 @@ fun Po(
             }
         }
     }
-    val onSubmit: () -> Unit = {
-        if (items.size > 0) {
+
+    fun onSubmit(dev: String) {
+        if (items.isNotEmpty()) {
             submitting.value = true
             showSubmit.value = true
             try {
-                val submitApi = RestAPI.create<StockApi>(token = user!!.token)
+                val submitApi = RestAPI.create<StockApi>(token = user!!.token, deviceId = dev)
                 val submitCall = submitApi.createPO(StockOrderInput(orders = items.map { v ->
                     StockOrder(
                         itemOid = v.info.oid,
@@ -269,7 +271,7 @@ fun Po(
             if (cameraPermission.hasPermission) {
                 CameraBox(ctx, scope, onCodeDetected = { code ->
                     barcode.value = code
-                    checkItem()
+                    checkItem(dev.value ?: "")
                     canShowCamera.value = false
                 }, onStartAnalyze = { img, fm ->
                     try {
@@ -343,7 +345,7 @@ fun Po(
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = {
                             keyboardController?.hide()
-                            checkItem()
+                            checkItem(dev.value ?: "")
                         }),
                         enabled = config?.warehouse != null
                     )
@@ -452,7 +454,7 @@ fun Po(
                         showConfirm.value = true
                     },
                     colors = ButtonDefaults.buttonColors(Color(0xFF5E8332)),
-                    enabled = items.size > 0,
+                    enabled = items.isNotEmpty(),
                     modifier = Modifier.weight(1f)
                 ) { Text(text = "Submit", fontSize = 10.sp) }
             }
@@ -694,7 +696,7 @@ fun Po(
                                     showConfirm.value = false
                                 } else {
                                     showConfirm.value = false
-                                    onSubmit()
+                                    onSubmit(dev.value ?: "")
                                 }
                             },
                             modifier = Modifier.weight(1f)

@@ -31,17 +31,23 @@ import com.biztools.stockcount.ui.theme.BackgroundAccent
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TopBar(presenter: TopBarPresenter) {
-    val title = remember(presenter.page!!.value) {
-        var manipulate = when (presenter.page!!.value) {
+    val title = remember(presenter.page.value) {
+        var manipulate = when (presenter.page.value) {
             "menu" -> "Home"
             "codes" -> "Unsaved Count"
             "scan" -> "Count Stock"
+            "on-hand" -> "Items on Hand"
+            "check-promo" -> "Check Promotions"
             "label" -> "Print Label"
             "po" -> "Purchase Order"
             "config" -> "PO Config"
-            else -> presenter.page!!.value.replaceFirstChar { it.uppercase() }
+            else -> presenter.page.value.replaceFirstChar { it.uppercase() }
         }
-        if (manipulate.lowercase().startsWith("add-item")) manipulate = "Add Item"
+        if (manipulate.startsWith("Check-promo")) {
+            manipulate = "Check Promotion"
+        } else if (manipulate.startsWith("On-hand")) {
+            manipulate = "Items on Hand"
+        } else if (manipulate.startsWith("Add-item")) manipulate = "Add Item"
         mutableStateOf(manipulate)
     }
     TopAppBar(

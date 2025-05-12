@@ -2,8 +2,8 @@ package com.biztools.stockcount.stores
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.biztools.stockcount.models.ReservedBarcodeData
 import com.google.gson.Gson
 import kotlinx.coroutines.flow.map
@@ -24,35 +24,20 @@ class BarcodesStore(private val ctx: Context) {
                 it[barcodesKey] = toStoreData(code)
                 return@edit
             }
-//            val oldList = old.split("|#|")
-//                .map { d -> Gson().fromJson(d, ReservedBarcodeData::class.java) }
-//                .toMutableList()
             val oldList = extractData(old)
             oldList.add(code)
             it[barcodesKey] = oldList.joinToString("\n") { d -> toStoreData(d) }
         }
     }
 
-    suspend fun remove(code: String, warehouse: String) {
+    suspend fun reset(codes: List<ReservedBarcodeData>) {
         ctx.barcodesStore.edit {
-            val old = it[barcodesKey]
-            if (old.isNullOrEmpty() || old.isBlank()) return@edit
-//            val oldList = old.split("|#|")
-//                .map { d -> Gson().fromJson(d, ReservedBarcodeData::class.java) }
-//                .toMutableList()
-            val oldList = extractData(old)
-            oldList.removeIf { d ->
-                (d.code == code && d.warehouse == warehouse) || d.timestamp.get(
-                    Calendar.DATE
-                ) >= Calendar.getInstance().get(Calendar.DATE)
-            }
-            it[barcodesKey] = oldList.joinToString("|#|") { d -> Gson().toJson(d) }
+            it[barcodesKey] = codes.joinToString("\n") { d -> toStoreData(d) }
         }
     }
 
     private fun extractData(content: String): MutableList<ReservedBarcodeData> {
         return content.split("\n")
-//                .map { d -> Gson().fromJson(d, ReservedBarcodeData::class.java) }
             .map { d ->
                 val chunks = d.split(";;").filter { c -> c.isNotEmpty() && c.isNotBlank() }
                 val codeChunk = chunks.find { c -> c.startsWith("code=") } ?: "code="
@@ -76,10 +61,8 @@ class BarcodesStore(private val ctx: Context) {
         ctx.barcodesStore.edit {
             val old = it[barcodesKey]
             if (old.isNullOrEmpty() || old.isBlank()) return@edit
-            val oldList = extractData(old)
-            oldList.removeIf { d ->
-                fn(d) || d.timestamp >= Calendar.getInstance()
-            }
+            var oldList = extractData(old)
+            oldList = oldList.filter { c -> fn(c) }.toMutableList()
             it[barcodesKey] = oldList.joinToString("|#|") { d -> Gson().toJson(d) }
         }
     }
@@ -87,8 +70,6 @@ class BarcodesStore(private val ctx: Context) {
     val codes = ctx.barcodesStore.data.map {
         if (it[barcodesKey].isNullOrEmpty() || it[barcodesKey].isNullOrBlank()) listOf()
         else {
-//            val chunks = it[barcodesKey]!!.split("|#|")
-//                .map { c -> Gson().fromJson(c, ReservedBarcodeData::class.java) }
             val chunks = extractData(it[barcodesKey]!!)
             chunks.distinctBy { d -> d.code + d.warehouse }.map { d ->
                 ReservedBarcodeData(

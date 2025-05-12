@@ -9,7 +9,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -35,18 +34,8 @@ fun Modifier.customShadow(
     drawIntoCanvas { it.drawRoundRect(x, y, size.width, size.height, corner, corner, paint) }
 }
 
-//fun Modifier.bestBg(reverse: Boolean = false) = background(
-//    brush = if (reverse) Brush.linearGradient(
-//        listOf(
-//            Color(0xFFFFD3D3), Color(0xFFFFF4F4)
-//        ), start = Offset.Zero, end = Offset.Infinite
-//    ) else Brush.linearGradient(
-//        listOf(
-//            Color(0xFFFFF4F4), Color(0xFFFFD3D3)
-//        ), start = Offset.Zero, end = Offset.Infinite
-//    )
-//)
-fun Modifier.bestBg(reverse: Boolean = false) = background(Color.White)
+fun Modifier.bestBg(reverse: Boolean = false) =
+     background(if (reverse) Color.Black else Color.White)
 
 
 fun Modifier.innerShadow(

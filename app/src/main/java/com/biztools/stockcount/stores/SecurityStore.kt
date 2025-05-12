@@ -15,7 +15,6 @@ var currentInteractions = mutableIntStateOf(0)
 class SecurityStore(private val context: Context) {
     private val deviceKey = stringPreferencesKey("device")
     private val dateKey = stringPreferencesKey("days")
-    val date = context.securityStore.data.map { it[dateKey] }
     val device = context.securityStore.data.map { it[deviceKey] }
 
     suspend fun secure(device: String) {

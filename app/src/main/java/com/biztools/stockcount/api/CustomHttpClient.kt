@@ -39,9 +39,6 @@ class CustomHttpClient {
         fun unsafeSslClient(
             token: String? = null,
             headers: List<Header> = listOf()
-//            refreshToken: String? = null,
-//            deviceId: String? = null,
-//            forRefresh: Boolean = false
         ): OkHttpClient {
             val trusts = arrayOf<TrustManager>(
                 UnsafeTrust()
@@ -53,24 +50,12 @@ class CustomHttpClient {
             builder.sslSocketFactory(sslFactory, UnsafeTrust())
             builder.hostnameVerifier(UnsafeHostVerifier())
             val hasToken = !token.isNullOrBlank() && token.isNotEmpty() && token != "no-token"
-//            val hasRefresh = !refreshToken.isNullOrBlank() && refreshToken.isNotEmpty()
-//            val hasDevice = !deviceId.isNullOrBlank() && deviceId.isNotEmpty()
             builder.addInterceptor {
                 val b = it.request().newBuilder()
                 b.addHeader("Content-Type", "application/json")
                     .addHeader("Accept", "application/json")
-//                    .addHeader("conical-api-key", "s24eBL77FCuik/d8BsD9vk+0xnmGK8mNxrWRQT9JfQ0=")
-//                if (hasToken || hasRefresh || hasDevice) {
                 if (hasToken) {
                     b.addHeader("Authorization", "Bearer " + token!!)
-//                    b.addHeader("conical-device-id", deviceId!!)
-//                    when (forRefresh) {
-//                        true -> b.addHeader("Authorization", "Bearer " + refreshToken!!)
-//                            .addHeader("conical-refresh-token", token!!)
-//
-//                        false -> b.addHeader("Authorization", "Bearer " + token!!)
-//                            .addHeader("conical-refresh-token", refreshToken!!)
-//                    }
                 }
                 if (headers.isNotEmpty()) {
                     for (h in headers) {
@@ -79,9 +64,9 @@ class CustomHttpClient {
                 }
                 it.proceed(b.build())
             }
-            builder.connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(20, TimeUnit.SECONDS)
-                .writeTimeout(20, TimeUnit.SECONDS)
+            builder.connectTimeout(2, TimeUnit.MINUTES)
+                .readTimeout(2, TimeUnit.MINUTES)
+                .writeTimeout(2, TimeUnit.MINUTES)
             return builder.build()
         }
     }

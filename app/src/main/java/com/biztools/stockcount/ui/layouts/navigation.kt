@@ -19,9 +19,11 @@ import com.biztools.stockcount.presentations.pagePresentations.ScanPresenter
 import com.biztools.stockcount.stores.SettingStore
 import com.biztools.stockcount.stores.UserStore
 import com.biztools.stockcount.ui.pages.AddItem
+import com.biztools.stockcount.ui.pages.CheckPromo
 import com.biztools.stockcount.ui.pages.POConfig
 import com.biztools.stockcount.ui.pages.Po
 import com.biztools.stockcount.ui.pages.PrintLabel
+import com.biztools.stockcount.ui.pages.OnHand
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -35,8 +37,6 @@ fun NavigationScaffold(
     page: MutableState<String>,
     drawer: DrawerState,
     warehouses: GetWarehousesResult,
-    device: String = "",
-    isUnauth: Boolean = true,
     onUnauth: () -> Unit,
     onAuth: () -> Unit
 ) {
@@ -54,10 +54,15 @@ fun NavigationScaffold(
                 page,
                 drawer,
                 warehouses,
-                device = device,
                 onUnauth = onUnauth,
                 onAuth = onAuth
-            ).render(null)
+            ).Render()
+        }
+        composable("check-promo/{number}") {
+            CheckPromo(ctx, navigator, drawer, scope)
+        }
+        composable("on-hand/{number}") {
+            OnHand(ctx, navigator, drawer, scope)
         }
         composable("menu") {
             MenuPresenter(
@@ -67,7 +72,7 @@ fun NavigationScaffold(
                 navigator,
                 page,
                 drawer
-            ).render(null)
+            ).Render()
         }
         composable("codes") {
             ReservedCodesPresenter(
@@ -77,8 +82,7 @@ fun NavigationScaffold(
                 navigator,
                 page,
                 drawer,
-                device = device
-            ).render(null)
+            ).Render()
         }
         composable("scan") {
             ScanPresenter(
@@ -89,7 +93,7 @@ fun NavigationScaffold(
                 page,
                 drawer,
                 warehouses
-            ).render(null)
+            ).Render()
         }
         composable("label") {
             AuthPresenter(
@@ -98,10 +102,9 @@ fun NavigationScaffold(
                 darkTheme = isDark,
                 navigator,
                 drawer,
-                device = device,
                 onAuth = onAuth
             ) {
-                PrintLabel(ctx, scope, isDark, user, device = device, onUnauth = onUnauth)
+                PrintLabel(ctx, scope, isDark, user, onUnauth = onUnauth)
             }.Initialize()
         }
         composable("po") {
@@ -111,7 +114,6 @@ fun NavigationScaffold(
                 darkTheme = isDark,
                 navigator,
                 drawer,
-                device = device,
                 onAuth = onAuth
             ) {
                 Po(ctx, scope, isDark, user, page.value, navigator, onUnauth = onUnauth)
@@ -128,7 +130,6 @@ fun NavigationScaffold(
                 darkTheme = isDark,
                 navigator,
                 drawer,
-                device = device,
                 onAuth = onAuth
             ) {
                 AddItem(

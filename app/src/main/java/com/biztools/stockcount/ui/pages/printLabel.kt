@@ -38,6 +38,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
@@ -65,6 +66,7 @@ import com.biztools.stockcount.models.PrintBarcodesInput
 import com.biztools.stockcount.models.PrintBarcodesResult
 import com.biztools.stockcount.models.RateCard
 import com.biztools.stockcount.models.User
+import com.biztools.stockcount.stores.SecurityStore
 import com.biztools.stockcount.ui.components.CircularLoading
 import com.biztools.stockcount.ui.extensions.bestBg
 import com.biztools.stockcount.ui.extensions.innerShadow
@@ -86,9 +88,9 @@ fun PrintLabel(
     scope: CoroutineScope,
     isDark: Boolean,
     user: User?,
-    device: String = "",
     onUnauth: () -> Unit
 ) {
+    val dev = SecurityStore(ctx).device.collectAsState(initial = "")
     val barcodes = remember { mutableListOf<String>() }
     val currentBarcode = remember { mutableStateOf<String?>(null) }
     val currentRate = remember { mutableStateOf<RateCard?>(null) }
@@ -120,10 +122,10 @@ fun PrintLabel(
         mutableStateOf(false)
     }
     val focusRequest = FocusRequester()
-    val getRates: () -> Unit = {
+    fun getRates(dev: String) {
         if (rates.value == null) {
             try {
-                val ratesApi = RestAPI.create<StockApi>(user?.token, deviceId = device)
+                val ratesApi = RestAPI.create<StockApi>(user?.token, deviceId = dev)
                 val call = ratesApi.getRateCards()
                 RestAPI.execute(call, scope, onSuccess = { r ->
                     rates.value = r
@@ -137,11 +139,12 @@ fun PrintLabel(
             }
         }
     }
-    val printBarcodes: () -> Unit = {
+
+    fun printBarcodes(dev: String) {
         printResult.value = null
         try {
             printing.value = true
-            val printApi = RestAPI.create<StockApi>(user?.token, deviceId = device)
+            val printApi = RestAPI.create<StockApi>(user?.token, deviceId = dev)
             val printCall = printApi
                 .printBatchBarcodes(PrintBarcodesInput(currentRate.value?.oid, barcodes))
             RestAPI.execute(printCall, scope,
@@ -163,19 +166,20 @@ fun PrintLabel(
             Toast.makeText(ctx, e.message, Toast.LENGTH_LONG).show()
         }
     }
-    val addItems: (mode: ReprintMode) -> Unit = { m ->
+
+    fun addItems(mode: ReprintMode, dev: String) {
         try {
-            when (m) {
+            when (mode) {
                 ReprintMode.NONE -> yesAdding.value = true
                 ReprintMode.ALL -> yesPrintingAll.value = true
                 else -> yesPrintingThem.value = true
             }
-            val addApi = RestAPI.create<StockApi>(user?.token, deviceId = device)
+            val addApi = RestAPI.create<StockApi>(user?.token, deviceId = dev)
             val addCall = addApi.addItems(AddItemsInput(printResult.value!!.notFoundCodes))
             RestAPI.execute(addCall, scope, onSuccess = {
                 Toast.makeText(ctx, "Items added", Toast.LENGTH_SHORT).show()
-                if (m != ReprintMode.NONE) {
-                    val codes = when (m) {
+                if (mode != ReprintMode.NONE) {
+                    val codes = when (mode) {
                         ReprintMode.ONLY -> printResult.value!!.notFoundCodes
                         else -> barcodes
                     }
@@ -244,7 +248,11 @@ fun PrintLabel(
             firstFocus.value = false
         }
     }
-    LaunchedEffect(user, rates.value) { if (user != null && rates.value == null) getRates() }
+    LaunchedEffect(user, rates.value) {
+        if (user != null && rates.value == null) getRates(
+            dev.value ?: ""
+        )
+    }
     if (initializing.value) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularLoading(Modifier.size(80.dp))
@@ -255,7 +263,6 @@ fun PrintLabel(
         }
         if (cameraPermission.hasPermission) {
             CameraBox(ctx, scope, onCodeDetected = { code ->
-//                currentBarcode.value = code
                 barcodes.add(code)
                 canShowCamera.value = false
             }, onStartAnalyze = { img, fm ->
@@ -316,8 +323,10 @@ fun PrintLabel(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = {
                         keyboardCtl?.hide()
-                        barcodes.add(currentBarcode.value!!)
-                        currentBarcode.value = null
+                        if (!currentBarcode.value.isNullOrEmpty() && !currentBarcode.value.isNullOrBlank()) {
+                            barcodes.add(currentBarcode.value!!)
+                        }
+                        currentBarcode.value = ""
                         imageCapture.value = null
                     })
                 )
@@ -331,8 +340,10 @@ fun PrintLabel(
                             enabled = !printing.value && currentBarcode.value != null,
                             onClick = {
                                 keyboardCtl?.hide()
-                                barcodes.add(currentBarcode.value!!)
-                                currentBarcode.value = null
+                                if (!currentBarcode.value.isNullOrEmpty() && !currentBarcode.value.isNullOrBlank()) {
+                                    barcodes.add(currentBarcode.value!!)
+                                }
+                                currentBarcode.value = ""
                                 imageCapture.value = null
                             })
                         .clip(CircleShape)
@@ -359,6 +370,7 @@ fun PrintLabel(
                     )
                     .fillMaxSize()
                     .padding(8.dp),
+                reverseLayout = true,
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 items(count = barcodes.size, key = { idx -> "${barcodes[idx]}-${idx}" }) {
@@ -378,7 +390,7 @@ fun PrintLabel(
                                 .size(18.dp)
                                 .clickable {
                                     if (currentBarcode.value == barcodes[it]) {
-                                        currentBarcode.value = null
+                                        currentBarcode.value = ""
                                     }
                                     barcodes.removeAt(it)
                                 }
@@ -436,14 +448,14 @@ fun PrintLabel(
             Button(
                 onClick = {
                     barcodes.clear()
-                    currentBarcode.value = null
+                    currentBarcode.value = ""
                 }, modifier = Modifier
                     .weight(1f),
                 enabled = barcodes.isNotEmpty() && !printing.value,
                 colors = ButtonDefaults.buttonColors(Color.Gray)
             ) { Text(text = "Clear") }
             Button(
-                onClick = { printBarcodes() },
+                onClick = { printBarcodes(dev.value ?: "") },
                 enabled = barcodes.isNotEmpty() && !printing.value,
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(Color(0xFF5C7A38))
@@ -507,7 +519,12 @@ fun PrintLabel(
                         Button(
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(Color(0xFF5B7C34)),
-                            onClick = { addItems(ReprintMode.ONLY) }) { Text(text = "Yes and print them") }
+                            onClick = {
+                                addItems(
+                                    ReprintMode.ONLY,
+                                    dev.value ?: ""
+                                )
+                            }) { Text(text = "Yes and print them") }
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -516,7 +533,12 @@ fun PrintLabel(
                         Button(
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(Color(0xFF5B7C34)),
-                            onClick = { addItems(ReprintMode.ALL) }) { Text(text = "Yes and print all again") }
+                            onClick = {
+                                addItems(
+                                    ReprintMode.ALL,
+                                    dev.value ?: ""
+                                )
+                            }) { Text(text = "Yes and print all again") }
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -525,7 +547,12 @@ fun PrintLabel(
                         Button(
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(Color(0xFF5B7C34)),
-                            onClick = { addItems(ReprintMode.NONE) }) { Text(text = "Yes") }
+                            onClick = {
+                                addItems(
+                                    ReprintMode.NONE,
+                                    dev.value ?: ""
+                                )
+                            }) { Text(text = "Yes") }
                         Button(
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(Color.Gray),

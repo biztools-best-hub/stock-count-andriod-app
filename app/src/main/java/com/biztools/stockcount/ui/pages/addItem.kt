@@ -17,6 +17,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -26,6 +27,7 @@ import androidx.navigation.NavHostController
 import com.biztools.stockcount.api.RestAPI
 import com.biztools.stockcount.api.StockApi
 import com.biztools.stockcount.models.User
+import com.biztools.stockcount.stores.SecurityStore
 import com.biztools.stockcount.ui.components.CircularLoading
 import com.biztools.stockcount.ui.extensions.bestBg
 import kotlinx.coroutines.CoroutineScope
@@ -38,9 +40,9 @@ fun AddItem(
     navigator: NavHostController,
     code: String? = null,
     fromRoute: String? = null,
-    device: String = "",
     onUnauth: () -> Unit
 ) {
+    val dev = SecurityStore(ctx).device.collectAsState(initial = "")
     val route = remember(fromRoute) {
         var r = fromRoute ?: "menu"
         if (r.isEmpty() || r.isBlank()) r = "menu"
@@ -55,13 +57,14 @@ fun AddItem(
     val invalid = remember {
         mutableStateOf(false)
     }
-    val onSubmit: () -> Unit = {
+
+    fun onSubmit(dev: String) {
         if (itemCode.value.contains(" ")) {
             invalid.value = true
         } else {
             submitting.value = true
             try {
-                val api = RestAPI.create<StockApi>(user?.token, deviceId = device)
+                val api = RestAPI.create<StockApi>(user?.token, deviceId = dev)
                 val call = api.addItem(itemCode.value)
                 RestAPI.execute(call, scope, onSuccess = {
                     navigator.navigate(route.value) { popUpTo("menu") }
@@ -95,7 +98,7 @@ fun AddItem(
                 },
                 enabled = !submitting.value,
                 singleLine = true,
-                keyboardActions = KeyboardActions(onDone = { onSubmit() })
+                keyboardActions = KeyboardActions(onDone = { onSubmit(dev.value ?: "") })
             )
             if (invalid.value) {
                 Text(text = "space not allowed!", color = Color.Red)
@@ -117,7 +120,7 @@ fun AddItem(
                 modifier = Modifier.weight(1f),
                 enabled = !submitting.value && itemCode.value.isNotEmpty(),
                 colors = ButtonDefaults.buttonColors(Color(0xFF5B7938)),
-                onClick = { onSubmit() }) {
+                onClick = { onSubmit(dev.value ?: "") }) {
                 if (submitting.value) CircularLoading(modifier = Modifier.size(20.dp))
                 else Text(text = "Submit")
             }

@@ -2,7 +2,6 @@ package com.biztools.stockcount.presentations.layoutPresentations
 
 import android.app.Activity
 import android.content.Context
-import android.widget.Toast
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -57,18 +56,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import com.biztools.stockcount.BuildConfig
 import com.biztools.stockcount.R
 import com.biztools.stockcount.api.AuthApi
 import com.biztools.stockcount.api.Header
 import com.biztools.stockcount.api.RestAPI
-import com.biztools.stockcount.api.license
 import com.biztools.stockcount.models.GetWarehousesResult
 import com.biztools.stockcount.models.User
 import com.biztools.stockcount.stores.SecurityStore
 import com.biztools.stockcount.stores.SettingStore
 import com.biztools.stockcount.stores.UserStore
-import com.biztools.stockcount.stores.currentInteractions
-import com.biztools.stockcount.stores.previousInteractions
 import com.biztools.stockcount.ui.Main
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -77,13 +74,14 @@ import java.util.Calendar
 import kotlin.system.exitProcess
 
 class MainPresenter(
-    ctx: Context? = null,
-    scope: CoroutineScope? = null,
-    setting: SettingStore? = null,
-    navigator: NavHostController? = null,
-    page: MutableState<String>? = null,
-    drawer: DrawerState? = null
-) : BasePresenter(ctx, scope, setting, navigator, page, drawer) {
+    val ctx: Context,
+    val scope: CoroutineScope,
+    val setting: SettingStore,
+    val navigator: NavHostController,
+    val page: MutableState<String>,
+    val drawer: DrawerState
+)
+{
     private var warehouses: MutableState<GetWarehousesResult?> = mutableStateOf(null)
     private var _failedValidation: MutableState<Boolean> = mutableStateOf(false)
     private var _initializing: MutableState<Boolean> = mutableStateOf(true)
@@ -93,6 +91,7 @@ class MainPresenter(
     private var _registering: MutableState<Boolean> = mutableStateOf(false)
     private var device: State<String?> = mutableStateOf(null)
     private var _user: State<User?> = mutableStateOf(null)
+    private var _isDarkTheme: State<Boolean> = mutableStateOf(false)
     private var _secureStore: SecurityStore? = null
     private var _userStore: UserStore? = null
     private var isUnAuth = mutableStateOf(false)
@@ -100,288 +99,238 @@ class MainPresenter(
     private var _date: State<String> = mutableStateOf("")
     private var _msg: MutableState<String> = mutableStateOf("")
     private var _byRegister: MutableState<Boolean> = mutableStateOf(false)
-    val content: @Composable () -> Unit
-        get() = {
-            if (warehouses.value != null) DrawerPresenter(
-                ctx,
-                scope,
-                setting,
-                navigator,
-                page,
-                drawer,
-                warehouses.value!!,
-                device = device.value ?: "",
-                _unAuthFromOutside = isUnAuth.value
-            ).render(null)
-        }
+
+    @Composable
+    fun Content() {
+        if (warehouses.value != null) DrawerPresenter(
+            ctx,
+            scope,
+            setting,
+            navigator,
+            page,
+            drawer,
+            warehouses.value!!,
+            device = device.value ?: "",
+            _unAuthFromOutside = isUnAuth.value
+        ).Render()
+    }
+
     private var switch = mutableIntStateOf(0)
     private var isInteracted = mutableStateOf(true)
 
-    override val render: @Composable (content: (() -> Unit)?) -> Unit
-        get() = {
-            _failedValidation = remember { mutableStateOf(false) }
-            _initializing = remember { mutableStateOf(true) }
-            _initializeError = remember { mutableStateOf(false) }
-            _registering = remember { mutableStateOf(false) }
-            _secureStore = SecurityStore(ctx!!)
-            _userStore = UserStore(ctx!!)
-            _user = _userStore!!.user.collectAsState(initial = null)
-            _byRegister = remember { mutableStateOf(false) }
-            _retryCount = remember { mutableIntStateOf(0) }
-            _date = remember { mutableStateOf("") }
-            _msg = remember { mutableStateOf("") }
-            switch = remember { mutableIntStateOf(0) }
-            _device = _secureStore!!.device.collectAsState(initial = null)
-            isInteracted = remember { mutableStateOf(true) }
-            _needValidate = remember(_date.value, _device.value) {
-                val noDevice = _device.value.isNullOrBlank() || _device.value.isNullOrEmpty()
-                val noDate = _date.value.isEmpty() || _date.value.isBlank()
-                val date = Calendar.getInstance()
-                if (!noDate) date.timeInMillis = _date.value.toLongOrNull() ?: 0
-                else date.timeInMillis = 0
-                val valid = validDate(date, Calendar.getInstance()) && !noDate && !noDevice
-                mutableStateOf(!valid)
-            }
-            warehouses = remember { mutableStateOf(null) }
-            val onUnauth: () -> Unit = {
-                _failedValidation.value = true
-                _initializeError.value = false
-                _retryCount.value = 0
-                _initializing.value = false
-            }
-            val onSuccess: (r: GetWarehousesResult) -> Unit = {
-                warehouses.value = it
-                _retryCount.value = 0
-                _initializeError.value = false
-                _failedValidation.value = false
-                _initializing.value = false
-            }
-            LaunchedEffect(_msg.value) {
-                if (_msg.value.isNotEmpty()) {
-                    Toast.makeText(ctx, _msg.value, Toast.LENGTH_SHORT).show()
+    @Composable
+    fun Render() {
+        _failedValidation = remember { mutableStateOf(false) }
+        _isDarkTheme = remember { mutableStateOf(false) }
+        _initializing = remember { mutableStateOf(true) }
+        _initializeError = remember { mutableStateOf(false) }
+        _registering = remember { mutableStateOf(false) }
+        _secureStore = SecurityStore(ctx)
+        _userStore = UserStore(ctx)
+        _user = _userStore!!.user.collectAsState(initial = null)
+        _byRegister = remember { mutableStateOf(false) }
+        _retryCount = remember { mutableIntStateOf(0) }
+        _date = remember { mutableStateOf("") }
+        _msg = remember { mutableStateOf("") }
+        switch = remember { mutableIntStateOf(0) }
+        _device = _secureStore!!.device.collectAsState(initial = null)
+        isInteracted = remember { mutableStateOf(true) }
+        _needValidate = remember(_date.value, _device.value) {
+            val noDevice = _device.value.isNullOrBlank() || _device.value.isNullOrEmpty()
+            val noDate = _date.value.isEmpty() || _date.value.isBlank()
+            val date = Calendar.getInstance()
+            if (!noDate) date.timeInMillis = _date.value.toLongOrNull() ?: 0
+            else date.timeInMillis = 0
+            val valid = validDate(date, Calendar.getInstance()) && !noDate && !noDevice
+            mutableStateOf(!valid)
+        }
+        warehouses = remember { mutableStateOf(null) }
+        val onUnauth: () -> Unit = {
+            _failedValidation.value = true
+            _initializeError.value = false
+            _retryCount.value = 0
+            _initializing.value = false
+        }
+        val onSuccess: (r: GetWarehousesResult) -> Unit = {
+            warehouses.value = it
+            _retryCount.value = 0
+            _initializeError.value = false
+            _failedValidation.value = false
+            _initializing.value = false
+        }
+//        LaunchedEffect(Unit) {
+//            Toast.makeText(ctx, "api url: $apiUrl, license: $license", Toast.LENGTH_LONG).show()
+//        }
+        if (_initializing.value) {
+            LaunchedEffect(Unit) {
+                if (!_byRegister.value) {
+                    delay(2000L)
+                    initialize(onSuccess, onUnauth)
                 }
             }
-            LaunchedEffect(switch.intValue) {
-                if (!_failedValidation.value && !_initializing.value && !_initializeError.value) {
-                    if (isInteracted.value) {
-                        delay(1000L * 60 * 30)
-                        if (previousInteractions.intValue == currentInteractions.intValue) {
-                            isInteracted.value = false
-                        } else previousInteractions.intValue = currentInteractions.intValue
-                        switch.intValue = if (switch.intValue == 0) 1 else 0
-                    } else detectApp()
-                }
-            }
-            if (_initializing.value) {
-                LaunchedEffect(Unit) {
-                    if (!_byRegister.value) {
-                        delay(2000L)
-                        initialize(onSuccess, onUnauth)
-                    }
-                }
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                val transit = rememberInfiniteTransition(label = "loading")
+                val density = LocalDensity.current
+                val x = transit.animateFloat(
+                    initialValue = with(density) { (-80).dp.toPx() },
+                    targetValue = with(density) { 80.dp.toPx() },
+                    animationSpec = infiniteRepeatable(
+                        tween(durationMillis = 1000, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart
+                    ),
+                    label = "loading"
+                )
+                Image(
+                    painter = painterResource(id = R.drawable.best_code_scanner_logo),
+                    contentDescription = "logo",
+                    modifier = Modifier.size(80.dp)
+                )
+                Spacer(modifier = Modifier.height(25.dp))
+                Box(
+                    modifier = Modifier
+                        .clipToBounds()
+                        .width(80.dp)
+                        .height(2.dp)
+                        .background(Color(0x2A000000))
                 ) {
-                    val transit = rememberInfiniteTransition(label = "loading")
-                    val density = LocalDensity.current
-                    val x = transit.animateFloat(
-                        initialValue = with(density) { (-80).dp.toPx() },
-                        targetValue = with(density) { 80.dp.toPx() },
-                        animationSpec = infiniteRepeatable(
-                            tween(durationMillis = 1000, easing = LinearEasing),
-                            repeatMode = RepeatMode.Restart
-                        ),
-                        label = "loading"
-                    )
-                    Image(
-                        painter = painterResource(id = R.drawable.best_code_scanner_logo),
-                        contentDescription = "logo",
-                        modifier = Modifier.size(80.dp)
-                    )
-                    Spacer(modifier = Modifier.height(25.dp))
                     Box(
                         modifier = Modifier
-                            .clipToBounds()
                             .width(80.dp)
                             .height(2.dp)
-                            .background(Color(0x2A000000))
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .width(80.dp)
-                                .height(2.dp)
-                                .offset(Dp(x.value))
-                                .background(Color(0xFF000000))
-                        )
-                    }
+                            .offset(Dp(x.value))
+                            .background(Color(0xFF000000))
+                    )
                 }
-            } else if (_initializeError.value) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            tint = Color.Red,
-                            contentDescription = "failed",
-                            modifier = Modifier.size(50.dp)
-                        )
-                        Text(text = "Connection error!")
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 10.dp),
-                            horizontalArrangement = Arrangement.Center,
-                        ) {
-                            Button(
-                                onClick = {
-                                    _initializeError.value = false
-                                    _initializing.value = true
-                                    _retryCount.value = 0
-                                    initialize(onSuccess, onUnauth)
-                                },
-                                modifier = Modifier.width(100.dp),
-                                colors = ButtonDefaults.buttonColors()
-                            ) { Text(text = "Retry") }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Button(
-                                onClick = {
-                                    (ctx as Activity).finish()
-                                    exitProcess(0)
-                                },
-                                modifier = Modifier.width(100.dp),
-                                colors = ButtonDefaults.buttonColors()
-                            ) { Text(text = "Exit") }
-                        }
-                    }
-                }
-            } else if (_failedValidation.value) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(5.dp),
-                        modifier = Modifier.padding(10.dp)
-                    ) {
-                        val token = remember { mutableStateOf("") }
-                        val focusRequest = FocusRequester()
-                        val focusManager = LocalFocusManager.current
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            tint = Color.Red,
-                            contentDescription = "failed",
-                            modifier = Modifier.size(50.dp)
-                        )
-                        Text(text = "App license verification is failed, you can't use this app!")
-                        Text(
-                            text = "If this app not yet registered, please register by input registered token in text box below",
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(
-                            modifier = Modifier
-                                .border(
-                                    width = 1.dp,
-                                    color = Color(0xFFA7A7A7),
-                                    shape = RoundedCornerShape(4.dp)
-                                )
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp, horizontal = 10.dp),
-                            horizontalArrangement = Arrangement.spacedBy(5.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            LaunchedEffect(Unit) {
-                                focusRequest.requestFocus()
-                            }
-                            BasicTextField(
-                                value = token.value,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .focusRequester(focusRequest),
-                                onValueChange = { token.value = it },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                keyboardActions = KeyboardActions(onDone = {
-                                    focusManager.clearFocus()
-                                    registerApp(token.value, onSuccess)
-                                }),
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            Button(
-                                onClick = { registerApp(token.value, onSuccess) },
-                                colors = ButtonDefaults.buttonColors(
-                                    Color(0xFF597A32)
-                                ),
-                                enabled = token.value.isNotEmpty() && token.value.isNotBlank(),
-                                modifier = Modifier.weight(1f)
-                            ) { Text(text = "Register") }
-                            Button(
-                                onClick = {
-                                    (ctx!! as Activity).finish()
-                                    exitProcess(0)
-                                }, colors = ButtonDefaults.buttonColors(
-                                    Color(0xFFA53158)
-                                ),
-                                modifier = Modifier.weight(1f)
-                            ) { Text(text = "Exit") }
-                        }
-                    }
-                }
-            } else super.render { Main(presenter = this) }
-        }
-
-    private fun detectApp() {
-        Toast.makeText(ctx!!, "checking app", Toast.LENGTH_SHORT).show()
-        try {
-            if (!_user.value?.username.isNullOrEmpty()) {
-                val api = RestAPI.create<AuthApi>(
-                    token = _user.value?.token,
-                    deviceId = _device.value ?: ""
-                )
-                val call = api.validateAppAndWhoAmI()
-                RestAPI.execute(call, scope!!, onSuccess = { rr ->
-                    _secureStore?.secure(rr.device)
-                    _failedValidation.value = false
-                    if (rr.user.username.isEmpty()) {
-                        _userStore?.removeUser()
-                        isUnAuth.value = true
-                    } else isUnAuth.value = false
-                    isInteracted.value = true
-                    switch.intValue = if (switch.intValue == 0) 1 else 0
-                }, onError = { e ->
-                    if (e.message?.startsWith("unauth") == true) {
-                        _failedValidation.value = true
-                    }
-                    isInteracted.value = true
-                    switch.intValue = if (switch.intValue == 0) 1 else 0
-                })
-            } else {
-                val aApi = RestAPI.create<AuthApi>(deviceId = _device.value ?: "")
-                val aCall = aApi.validateApp()
-                RestAPI.execute(aCall, scope!!, onSuccess = { r ->
-                    _secureStore?.secure(r.deviceId)
-                    _failedValidation.value = false
-                    isInteracted.value = true
-                    switch.intValue = if (switch.intValue == 0) 1 else 0
-                }, onError = { e ->
-                    _msg.value = e.message ?: ""
-                    if (e.message?.startsWith("unauth") == true) {
-                        _failedValidation.value = true
-                    }
-                    isInteracted.value = true
-                    switch.intValue = if (switch.intValue == 0) 1 else 0
-                })
+                Spacer(modifier = Modifier.height(25.dp))
+                Text("api url: ${BuildConfig.apiUrl}")
+                Spacer(modifier = Modifier.height(5.dp))
+                Text("license: ${BuildConfig.license}")
+                Spacer(modifier = Modifier.height(5.dp))
+                Text("device-id: " + (_device.value ?: "none"))
             }
-        } catch (e: Exception) {
-            isInteracted.value = true
-            switch.intValue = if (switch.intValue == 0) 1 else 0
+        } else if (_initializeError.value) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        tint = Color.Red,
+                        contentDescription = "failed",
+                        modifier = Modifier.size(50.dp)
+                    )
+                    Text(text = _msg.value.ifEmpty { "Connection error!" })
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp),
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        Button(
+                            onClick = {
+                                _initializeError.value = false
+                                _initializing.value = true
+                                _retryCount.value = 0
+                                initialize(onSuccess, onUnauth)
+                            },
+                            modifier = Modifier.width(100.dp),
+                            colors = ButtonDefaults.buttonColors()
+                        ) { Text(text = "Retry") }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                (ctx as Activity).finish()
+                                exitProcess(0)
+                            },
+                            modifier = Modifier.width(100.dp),
+                            colors = ButtonDefaults.buttonColors()
+                        ) { Text(text = "Exit") }
+                    }
+                }
+            }
+        } else if (_failedValidation.value) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                    modifier = Modifier.padding(10.dp)
+                ) {
+                    val token = remember { mutableStateOf("") }
+                    val focusRequest = FocusRequester()
+                    val focusManager = LocalFocusManager.current
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        tint = Color.Red,
+                        contentDescription = "failed",
+                        modifier = Modifier.size(50.dp)
+                    )
+                    Text(text = "App license verification is failed, you can't use this app!")
+                    Text(
+                        text = "If this app not yet registered, please register by input registered token in text box below",
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier
+                            .border(
+                                width = 1.dp,
+                                color = Color(0xFFA7A7A7),
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp, horizontal = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        LaunchedEffect(Unit) {
+                            focusRequest.requestFocus()
+                        }
+                        BasicTextField(
+                            value = token.value,
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(focusRequest),
+                            onValueChange = { token.value = it },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = {
+                                focusManager.clearFocus()
+                                registerApp(token.value, onSuccess)
+                            }),
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Button(
+                            onClick = { registerApp(token.value, onSuccess) },
+                            colors = ButtonDefaults.buttonColors(
+                                Color(0xFF597A32)
+                            ),
+                            enabled = token.value.isNotEmpty() && token.value.isNotBlank(),
+                            modifier = Modifier.weight(1f)
+                        ) { Text(text = "Register") }
+                        Button(
+                            onClick = {
+                                (ctx as Activity).finish()
+                                exitProcess(0)
+                            }, colors = ButtonDefaults.buttonColors(
+                                Color(0xFFA53158)
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) { Text(text = "Exit") }
+                    }
+                }
+            }
+        } else {
+            Main(presenter = this)
         }
     }
 
@@ -393,8 +342,8 @@ class MainPresenter(
         try {
             val registerApi =
                 RestAPI.create<AuthApi>(headers = listOf(Header("conicalhat-license-token", token)))
-            val registerCall = registerApi.createLicense(license = license)
-            RestAPI.execute(registerCall, scope!!, onSuccess = {
+            val registerCall = registerApi.createLicense(license = BuildConfig.license)
+            RestAPI.execute(registerCall, scope, onSuccess = {
                 _secureStore?.secure("")
                 delay(500L)
                 coreInit(onSuccess)
@@ -403,7 +352,7 @@ class MainPresenter(
                 _initializeError.value = false
                 _initializing.value = false
             })
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             _failedValidation.value = true
             _initializeError.value = false
             _initializing.value = false
@@ -419,7 +368,7 @@ class MainPresenter(
         try {
             val authApi = RestAPI.create<AuthApi>(deviceId = _device.value ?: "")
             val vCall = authApi.validateAppAndGetWarehouses()
-            RestAPI.execute(vCall, scope!!, onSuccess = { r ->
+            RestAPI.execute(vCall, scope, onSuccess = { r ->
                 _secureStore!!.secure(r.device)
                 onSuccess(GetWarehousesResult(r.warehouses))
             }, onError = { e ->
@@ -440,6 +389,7 @@ class MainPresenter(
         onSuccess: (r: GetWarehousesResult) -> Unit,
         onUnauth: () -> Unit
     ) {
+        _msg.value = ""
         if (_retryCount.value > 3) {
             _failedValidation.value = false
             _initializeError.value = true
@@ -450,12 +400,17 @@ class MainPresenter(
         try {
             val authApi = RestAPI.create<AuthApi>(deviceId = _device.value ?: "")
             val vCall = authApi.validateAppAndGetWarehouses()
-            RestAPI.execute(vCall, scope!!, onSuccess = { r ->
+            RestAPI.execute(vCall, scope, onSuccess = { r ->
                 _secureStore!!.secure(r.device)
-                onSuccess(GetWarehousesResult(r.warehouses))
+                if (r.warehouses.isEmpty() && !r.warehouseError.isNullOrEmpty()) {
+                    _failedValidation.value = false
+                    _initializeError.value = true
+                    _initializing.value = false
+                    _msg.value = "couldn't get warehouses data, please check your system service"
+                    _retryCount.value = 0
+                } else onSuccess(GetWarehousesResult(r.warehouses))
             }, onError = { e ->
-                _msg.value = e.message ?: ""
-                Toast.makeText(ctx, e.message, Toast.LENGTH_SHORT).show()
+                _msg.value = e.message ?: e.cause?.message ?: ""
                 if (e.message?.startsWith("unauth") == true) onUnauth()
                 else {
                     _retryCount.value++
@@ -464,9 +419,9 @@ class MainPresenter(
                 }
             })
         } catch (ex: Exception) {
-            _msg.value = ex.message ?: ""
+            _msg.value = ex.message ?: ex.cause?.message ?: ""
             _retryCount.value++
-            scope!!.launch {
+            scope.launch {
                 delay(2000)
                 initialize(onSuccess, onUnauth)
             }

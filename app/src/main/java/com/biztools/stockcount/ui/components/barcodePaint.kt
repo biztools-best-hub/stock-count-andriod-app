@@ -1,6 +1,5 @@
 package com.biztools.stockcount.ui.components
 
-import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -17,6 +16,7 @@ import androidx.compose.ui.unit.Dp
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import kotlin.math.floor
+import androidx.core.graphics.createBitmap
 
 @Composable
 fun barcodePaint(givenSize: Dp, content: String): BitmapPainter {
@@ -46,7 +46,7 @@ fun barcodePaint(givenSize: Dp, content: String): BitmapPainter {
                     else Color.White.toArgb()
             }
         }
-        val innerBitmap = Bitmap.createBitmap(matrixWidth, matrixHeight, Bitmap.Config.ARGB_8888)
+        val innerBitmap = createBitmap(matrixWidth, matrixHeight)
         innerBitmap.setPixels(pixels, 0, matrixWidth, 0, 0, matrixWidth, matrixHeight)
         bitmap = innerBitmap.asImageBitmap()
     }
