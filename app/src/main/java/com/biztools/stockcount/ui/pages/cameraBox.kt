@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -60,7 +61,7 @@ fun CameraBox(
     val cameraProvider = cameraFuture.get()
     val cropSize = remember { mutableStateOf(Animatable(300.dp.value / 5)) }
     val density = LocalDensity.current
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val buildImageAnalysis: (executor: ExecutorService) -> ImageAnalysis = {
         val shutterSound = MediaActionSound()
         val barcodeAnalyzer =
@@ -112,9 +113,7 @@ fun CameraBox(
             update = {
                 cameraFuture.addListener({
                     val preview = Preview.Builder().build()
-                        .also { p ->
-                            p.surfaceProvider = it.surfaceProvider
-                        }
+                        .also { p -> p.setSurfaceProvider(it.surfaceProvider) }
                     try {
                         cameraProvider.bindToLifecycle(
                             lifecycleOwner,

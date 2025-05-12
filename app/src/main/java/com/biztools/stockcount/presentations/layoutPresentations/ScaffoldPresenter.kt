@@ -19,50 +19,44 @@ import com.biztools.stockcount.ui.layouts.NavigationScaffold
 import kotlinx.coroutines.CoroutineScope
 
 class ScaffoldPresenter(
-    val ctx: Context,
-    val scope: CoroutineScope,
-    val setting: SettingStore,
-    val navigator: NavHostController,
-    val page: MutableState<String>,
-    val drawer: DrawerState,
-    val device: String = "",
+    ctx: Context? = null,
+    scope: CoroutineScope? = null,
+    setting: SettingStore? = null,
+    navigator: NavHostController? = null,
+    page: MutableState<String>? = null,
+    drawer: DrawerState? = null,
     private val warehouses: GetWarehousesResult,
-    val onUnauth: () -> Unit,
-    val onAuth: () -> Unit
-)
-{
+    isUnauth: Boolean = true,
+    onUnauth: () -> Unit,
+    onAuth: () -> Unit
+) : BasePresenter(ctx, scope, setting, navigator, page, drawer) {
     private var _isQRShow: MutableState<Boolean> = mutableStateOf(false)
     private val closeQR: () -> Unit = { _isQRShow.value = false }
-
-    @Composable
-    fun Content() {
+    val content: @Composable () -> Unit = {
         _isQRShow = remember { mutableStateOf(false) }
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             NavigationScaffold(
-                ctx = ctx,
-                scope = scope,
-                setting = setting,
-                navigator = navigator,
-                page = page,
-                drawer = drawer,
+                ctx = ctx!!,
+                scope = scope!!,
+                setting = setting!!,
+                navigator = navigator!!,
+                page = page!!,
+                drawer = drawer!!,
                 warehouses,
+                isUnauth = isUnauth,
                 onUnauth = onUnauth,
                 onAuth = onAuth
             )
         }
     }
-
-    @Composable
-    fun Render() {
-        MainScaffold(
-            this,
-            TopBarPresenter(ctx, scope, setting, navigator, page, drawer),
-            BottomBarPresenter(ctx, scope, setting, navigator, page, drawer)
-        )
+    override val render: @Composable (content: (() -> Unit)?) -> Unit = {
+        super.render {
+            MainScaffold(
+                this,
+                TopBarPresenter(ctx, scope, setting, navigator, page, drawer),
+                BottomBarPresenter(ctx, scope, setting, navigator, page, drawer)
+            )
+        }
     }
-
-    @Composable
-    fun RenderQR() {
-        if (_isQRShow.value) QRDialog { closeQR() }
-    }
+    val renderQR: @Composable () -> Unit = { if (_isQRShow.value) QRDialog { closeQR() } }
 }

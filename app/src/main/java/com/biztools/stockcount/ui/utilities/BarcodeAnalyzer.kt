@@ -27,7 +27,7 @@ class BarcodeAnalyzer(
                 onStartAnalyze(processNeededImage)
                 scanner.process(processNeededImage).addOnSuccessListener { barcodes ->
                     if (barcodes.isEmpty()) return@addOnSuccessListener
-                    onBarcodeDetected(barcodes, image.image!!.width)
+                    onBarcodeDetected(barcodes, image.width)
                 }.addOnFailureListener(onFailed).addOnCompleteListener { image.close() }
             }
             lastAnalysisTimestamp = currentTimestamp

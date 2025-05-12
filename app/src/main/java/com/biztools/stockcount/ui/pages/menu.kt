@@ -1,5 +1,6 @@
 package com.biztools.stockcount.ui.pages
 
+//import androidx.compose.material3.Icon
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,8 +33,10 @@ import com.biztools.stockcount.ui.theme.White100
 
 @Composable
 fun Menu(presenter: MenuPresenter) {
+    val darkColor = Color(0xFF414141)
     val colors = CardDefaults.cardColors(
-        containerColor = White100
+        containerColor = if (presenter.isDarkTheme)
+            darkColor else White100
     )
     Box(
         modifier = Modifier
@@ -44,7 +47,7 @@ fun Menu(presenter: MenuPresenter) {
         Column(
             Modifier
                 .width(290.dp)
-                .height(440.dp),
+                .height(320.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -106,6 +109,7 @@ fun Menu(presenter: MenuPresenter) {
                         Text(text = "Count Stock", textAlign = TextAlign.Center)
                     }
                 }
+
             }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -113,65 +117,7 @@ fun Menu(presenter: MenuPresenter) {
                     .fillMaxWidth()
                     .weight(1f)
             ) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .weight(1f)
-                        .clickable { presenter.toOnHand() },
-                    colors = colors,
-                    elevation = CardDefaults.cardElevation(3.dp),
-                    shape = RoundedCornerShape(5.dp)
-                ) {
-                    Column(
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color(0xFFCEA1E2))
-                            .padding(10.dp)
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.oh_hand),
-                            modifier = Modifier.width(60.dp),
-                            contentDescription = "on hand"
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(text = "Item on Hand", textAlign = TextAlign.Center)
-                    }
-                }
-                Card(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .weight(1f)
-                        .clickable { presenter.toCheckPromo() },
-                    colors = colors,
-                    elevation = CardDefaults.cardElevation(3.dp),
-                    shape = RoundedCornerShape(5.dp)
-                ) {
-                    Column(
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color(0xFFD3D281))
-                            .padding(10.dp)
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.promo),
-                            modifier = Modifier.width(60.dp),
-                            contentDescription = "check promotions"
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(text = "Check Promotions", textAlign = TextAlign.Center)
-                    }
-                }
-            }
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            ) {
+
                 Card(
                     modifier = Modifier
                         .fillMaxHeight()
@@ -227,4 +173,5 @@ fun Menu(presenter: MenuPresenter) {
             }
         }
     }
+    presenter.content()
 }

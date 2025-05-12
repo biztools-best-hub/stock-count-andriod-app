@@ -52,6 +52,7 @@ import com.biztools.stockcount.api.AuthApi
 import com.biztools.stockcount.api.RestAPI
 import com.biztools.stockcount.api.StockApi
 import com.biztools.stockcount.models.GetWarehousesResult
+import com.biztools.stockcount.models.Item
 import com.biztools.stockcount.models.LoginInput
 import com.biztools.stockcount.models.User
 import com.biztools.stockcount.stores.SettingStore
@@ -65,17 +66,16 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 class DrawerPresenter(
-    val ctx: Context,
-    val scope: CoroutineScope,
-    val setting: SettingStore,
-    val navigator: NavHostController,
-    val page: MutableState<String>,
-    val drawer: DrawerState,
+    ctx: Context? = null,
+    scope: CoroutineScope? = null,
+    setting: SettingStore? = null,
+    navigator: NavHostController? = null,
+    page: MutableState<String>? = null,
+    drawer: DrawerState? = null,
     private val warehouses: GetWarehousesResult,
     private val device: String = "",
     private val _unAuthFromOutside: Boolean = false
-)
-{
+) : BasePresenter(ctx, scope, setting, navigator, page, drawer) {
     private var _isAutoScan: State<Boolean> = mutableStateOf(false)
     private var _showLogin = mutableStateOf(false)
     val showLogin get() = _showLogin.value
@@ -89,11 +89,13 @@ class DrawerPresenter(
     private var _downloading = mutableStateOf(false)
     private var _downloadSuccess = mutableStateOf(false)
     private var _pendingDownload = mutableStateOf(false)
-
+    private var _items = mutableStateListOf<Item>()
     private var _rawItems = mutableStateListOf<String>()
     private var _failedDownload = mutableStateOf(false)
     private var _showFile = mutableStateOf(false)
-
+    val rawItems get() = _rawItems
+    val items get() = _items
+    val showFile get() = _showFile.value
     val isUnauth get() = _isUnauth.value
     val user get() = _user.value
     val downloading get() = _downloading.value
@@ -106,9 +108,7 @@ class DrawerPresenter(
     private val onAuth: () -> Unit = {
         _isUnauth.value = false
     }
-
-    @Composable
-    fun Content() {
+    val content: @Composable () -> Unit = {
         Box(modifier = Modifier.fillMaxSize()) {
             ScaffoldPresenter(
                 ctx,
@@ -117,24 +117,14 @@ class DrawerPresenter(
                 navigator,
                 page,
                 drawer,
-                device = device,
                 warehouses,
+                isUnauth = _isUnauth.value,
                 onUnauth = onUnauth,
                 onAuth = onAuth
-            ).Render()
+            ).render(null)
         }
     }
-
-    fun closeDrawer(callBackBefore: () -> Unit = {}, callBackAfter: () -> Unit = {}) {
-        scope.launch {
-            callBackBefore()
-            drawer.close()
-            callBackAfter()
-        }
-    }
-
-    @Composable
-    fun LoginBox(dev: String) {
+    val loginBox: @Composable () -> Unit = {
         val un = remember { mutableStateOf("") }
         val pw = remember { mutableStateOf("") }
         val showPassword = remember { mutableStateOf(false) }
@@ -148,7 +138,10 @@ class DrawerPresenter(
                 modifier = Modifier
                     .clip(RoundedCornerShape(5.dp))
                     .fillMaxWidth()
-                    .background(Color(0xFFFFFFFF))
+                    .background(
+                        if (isDarkTheme) Color(0xFF222222)
+                        else Color(0xFFFFFFFF)
+                    )
                     .padding(20.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -222,7 +215,7 @@ class DrawerPresenter(
                                 enabled = !_loggingIn.value,
                                 singleLine = true,
                                 keyboardActions = KeyboardActions(onDone = {
-                                    onLogin(un.value, pw.value, dev)
+                                    onLogin(un.value, pw.value)
                                 }),
                                 keyboardOptions = KeyboardOptions(
                                     keyboardType = if (!showPassword.value) KeyboardType.Password
@@ -258,7 +251,7 @@ class DrawerPresenter(
                         Button(
                             onClick = {
                                 focus.clearFocus()
-                                onLogin(un.value, pw.value, dev)
+                                onLogin(un.value, pw.value)
                             },
                             enabled = !_loggingIn.value,
                             modifier = Modifier.fillMaxWidth(),
@@ -287,12 +280,12 @@ class DrawerPresenter(
 
     val nowLogin: () -> Unit = { _showLogin.value = true }
 
-    @Composable
-    fun Render() {
-        _isAutoScan = setting.isAutoScanMode.collectAsState(initial = false)
+    override val render: @Composable (content: (() -> Unit)?) -> Unit = {
+        _isAutoScan = setting!!.isAutoScanMode.collectAsState(initial = false)
         _showLogin = remember { mutableStateOf(false) }
         _downloading = remember { mutableStateOf(false) }
         _downloadSuccess = remember { mutableStateOf(false) }
+        _items = remember { mutableStateListOf() }
         _rawItems = remember { mutableStateListOf() }
         _pendingDownload = remember { mutableStateOf(false) }
         _showFile = remember { mutableStateOf(false) }
@@ -300,7 +293,7 @@ class DrawerPresenter(
         _loggingIn = remember { mutableStateOf(false) }
         _unError = remember { mutableStateOf(false) }
         _pwError = remember { mutableStateOf(false) }
-        userStore = UserStore(ctx)
+        userStore = UserStore(ctx!!)
         _user = userStore!!.user.collectAsState(initial = null)
         LaunchedEffect(_unAuthFromOutside) {
             if (_unAuthFromOutside) onUnauth()
@@ -308,54 +301,72 @@ class DrawerPresenter(
         LaunchedEffect(_user.value) {
             _isUnauth.value = _user.value == null
         }
-        Drawer(this)
+        super.render { Drawer(this) }
     }
 
     val toggleScanMode: () -> Unit = {
-        scope.launch { setting.toggleScanMode() }
+        scope?.launch { setting!!.toggleScanMode() }
     }
 
-    @Composable
-    fun RenderItem(
+    private fun readFile() {
+        val fileName = "conicalhat-items"
+        val file = File(ctx!!.filesDir, fileName)
+        if (!file.exists()) return
+        val tempLines = mutableListOf<String>()
+        if (_items.isNotEmpty()) _items.clear()
+        ctx?.openFileInput(fileName)?.bufferedReader()?.useLines { l ->
+            tempLines.add(l.fold("") { a, b -> "$a\n$b" })
+        }
+        if (tempLines.isNotEmpty()) {
+            val chunks = tempLines[0].split("\n").filter { s -> s.isNotEmpty() && s.isNotBlank() }
+            _items.addAll(chunks.map { c ->
+                val sub = c.split(";;")
+                Item(itemNumber = sub[0], barcode = if (sub[1] == "null") "" else sub[1])
+            })
+        }
+        _showFile.value = true
+    }
+
+    val renderItem: @Composable (
         selected: Boolean,
         label: (@Composable () -> Unit)?,
         icon: (@Composable () -> Unit)?,
         onClick: (() -> Unit)?
-    ) {
-        DrawerItem(label = label, icon = icon, isSelected = selected, onClick)
+    ) -> Unit = { selected, label, icon, click ->
+        DrawerItem(label = label, icon = icon, isSelected = selected, onClick = click)
     }
 
-    private fun onLogin(username: String, password: String, dev: String) {
+    private fun onLogin(username: String, password: String) {
         _loggingIn.value = true
         try {
-            val api = RestAPI.create<AuthApi>(deviceId = dev)
+            val api = RestAPI.create<AuthApi>(deviceId = device)
             val call = api.login(LoginInput(username, password))
-            RestAPI.execute(call, scope, onSuccess = { r ->
+            RestAPI.execute(call, scope!!, onSuccess = { r ->
                 _loggingIn.value = false
                 userStore!!.setUser(r.user.username, r.user.oid, r.token, r.user.password)
                 _showLogin.value = false
                 _isUnauth.value = false
                 if (_pendingDownload.value) {
-                    onDownload(dev)
+                    onDownload()
                     _pendingDownload.value = false
                 }
             }, onError = { e ->
                 _unError.value = true
                 _pwError.value = true
                 _loggingIn.value = false
-                Toast.makeText(ctx, e.message, Toast.LENGTH_LONG).show()
+                Toast.makeText(ctx!!, e.message, Toast.LENGTH_LONG).show()
             })
         } catch (e: Exception) {
             _unError.value = true
             _pwError.value = true
             _loggingIn.value = false
-            Toast.makeText(ctx, e.message, Toast.LENGTH_LONG).show()
+            Toast.makeText(ctx!!, e.message, Toast.LENGTH_LONG).show()
         }
     }
 
     val onLogout: () -> Unit = {
-        scope.launch {
-            if (drawer.isOpen) drawer.close()
+        scope?.launch {
+            if (drawer?.isOpen == true) drawer.close()
             userStore?.removeUser()
         }
     }
@@ -366,49 +377,55 @@ class DrawerPresenter(
         _downloadSuccess.value = false
     }
 
-    private fun download(page: Int, dev: String) {
-        try {
-            val api = RestAPI.create<StockApi>(user?.token, deviceId = dev)
-            val call = api.getItems(page, count = 500)
-            RestAPI.execute(call, scope, onSuccess = { r ->
-                try {
-                    if (r.items.isEmpty()) {
-                        _failedDownload.value = false
-                        _downloadSuccess.value = true
-                        _downloading.value = false
-                        val fileName = "conicalhat-items"
-                        val fileContents = _rawItems.joinToString("\n")
-                        val file = File(ctx.filesDir, fileName)
-                        if (file.exists()) file.delete()
-                        file.writeText(fileContents)
-                    } else {
-                        _rawItems.addAll(r.items.split("\n").sorted())
-                        download(page + 1, dev)
-                    }
-                } catch (_: Exception) {
-                    _failedDownload.value = true
-                    _downloading.value = false
-                }
-            }) { e ->
-                Toast.makeText(ctx, e.message, Toast.LENGTH_SHORT).show()
-                if (e.message?.startsWith("unauth") == true) onUnauth()
-                else _failedDownload.value = true
-                _downloading.value = false
-            }
-        } catch (_: Exception) {
-            _failedDownload.value = true
-            _downloading.value = false
-        }
-    }
-
-    fun onDownload(dev: String) {
+    fun onDownload() {
         if (user == null) {
             _showLogin.value = true
             _pendingDownload.value = true
             return
         }
         _downloading.value = true
-        _rawItems.clear()
-        download(1, dev)
+        try {
+            val api = RestAPI.create<StockApi>(user?.token, deviceId = device)
+            val call = api.getItems()
+            RestAPI.execute(call, scope!!, onSuccess = { r ->
+                try {
+                    _failedDownload.value = false
+                    _downloadSuccess.value = true
+                    _downloading.value = false
+                    val fileName = "conicalhat-items"
+                    val fileContents = r.items.split("\n").sorted().joinToString("\n")
+                    val file = File(ctx!!.filesDir, fileName)
+                    if (file.exists()) file.delete()
+                    file.writeText(fileContents)
+                    val lines = file.readLines()
+                    _rawItems.addAll(lines)
+                    val temp = mutableListOf<Item>()
+                    for (l in lines) {
+                        val chunks = l.split(";;").filter { c -> c.isNotEmpty() && c.isNotBlank() }
+                            .map { c -> c.trim() }
+                        val n = if (chunks.isNotEmpty()) chunks[0] else ""
+                        val bc = if (chunks.size > 1) chunks[1] else ""
+                        if (n.isEmpty() && bc.isEmpty()) continue
+                        temp.add(Item(itemNumber = n, barcode = bc))
+                    }
+                    _items.clear()
+                    _items.addAll(temp)
+//                    _showFile.value = true
+                } catch (ex: Exception) {
+                    _failedDownload.value = true
+                    _downloading.value = false
+                }
+            }) { e ->
+                Toast.makeText(ctx!!, e.message, Toast.LENGTH_SHORT).show()
+                if (e.message?.startsWith("unauth") == true) onUnauth()
+                else _failedDownload.value = true
+                _downloading.value = false
+            }
+        } catch (e: Exception) {
+            _failedDownload.value = true
+            _downloading.value = false
+        }
     }
+
+    val closeFile: () -> Unit = { _showFile.value = false }
 }

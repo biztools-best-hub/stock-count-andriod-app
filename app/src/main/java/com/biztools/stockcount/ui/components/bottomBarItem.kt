@@ -15,6 +15,7 @@ import com.biztools.stockcount.ui.utilities.NoRippleInteraction
 fun RowScope.BottomBarItem(
     isSelected: Boolean,
     icon: @Composable () -> Unit,
+    label: @Composable () -> Unit,
     onClick: () -> Unit
 ) {
     val colors = NavigationBarItemDefaults.colors(
@@ -29,6 +30,7 @@ fun RowScope.BottomBarItem(
         modifier = Modifier.height(70.dp),
         onClick = { onClick() },
         icon = { icon() },
+//        label = { label() },
         colors = colors,
         interactionSource = NoRippleInteraction()
     )

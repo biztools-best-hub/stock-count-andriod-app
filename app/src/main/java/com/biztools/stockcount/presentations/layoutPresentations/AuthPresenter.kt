@@ -51,7 +51,6 @@ import com.biztools.stockcount.api.AuthApi
 import com.biztools.stockcount.api.RestAPI
 import com.biztools.stockcount.models.LoginInput
 import com.biztools.stockcount.models.User
-import com.biztools.stockcount.stores.SecurityStore
 import com.biztools.stockcount.stores.UserStore
 import com.biztools.stockcount.ui.components.CircularLoading
 import com.biztools.stockcount.ui.utilities.NoRippleInteraction
@@ -65,6 +64,7 @@ class AuthPresenter(
     private val darkTheme: Boolean,
     private val navigator: NavHostController,
     private val drawer: DrawerState,
+    private val device: String = "",
     private val onAuth: () -> Unit = {},
     private val authorizedContent: @Composable () -> Unit
 ) {
@@ -80,10 +80,9 @@ class AuthPresenter(
     fun Initialize() {
         _store = UserStore(ctx)
         val user = _store!!.user
-            .collectAsState(initial = User("", "", "", "", Calendar.getInstance()))
+            .collectAsState(initial = User("", "", "", "", Calendar.getInstance())).value
         val focus = LocalFocusManager.current
         val showPassword = remember { mutableStateOf(false) }
-        val dev = SecurityStore(ctx).device.collectAsState(initial = null)
         _loggingIn = remember { mutableStateOf(false) }
         _closeNow = remember { mutableStateOf(false) }
         _un = remember { mutableStateOf("") }
@@ -93,8 +92,9 @@ class AuthPresenter(
         LaunchedEffect(true) {
             if (!drawer.isClosed) drawer.close()
         }
+
         authorizedContent()
-        if (user.value == null && !_closeNow.value) {
+        if ((user == null) && !_closeNow.value) {
             Dialog(
                 onDismissRequest = { onCancel() },
                 DialogProperties()
@@ -195,7 +195,7 @@ class AuthPresenter(
                                     enabled = !_loggingIn.value,
                                     singleLine = true,
                                     keyboardActions = KeyboardActions(onDone = {
-                                        onLogin(_un.value, _pw.value, dev.value ?: "")
+                                        onLogin(_un.value, _pw.value)
                                     }),
                                     keyboardOptions = KeyboardOptions(
                                         keyboardType = if (!showPassword.value) KeyboardType.Password
@@ -231,7 +231,7 @@ class AuthPresenter(
                             Button(
                                 onClick = {
                                     focus.clearFocus()
-                                    onLogin(_un.value, _pw.value, dev.value ?: "")
+                                    onLogin(_un.value, _pw.value)
                                 },
                                 enabled = !_loggingIn.value,
                                 modifier = Modifier.fillMaxWidth(),
@@ -261,16 +261,15 @@ class AuthPresenter(
         navigator.navigate("menu")
     }
 
-    private fun onLogin(username: String, password: String, dev: String) {
+    private fun onLogin(username: String, password: String) {
         _loggingIn.value = true
         try {
-            val api = RestAPI.create<AuthApi>(deviceId = dev)
+            val api = RestAPI.create<AuthApi>(deviceId = device)
             val call = api.login(LoginInput(username, password))
             RestAPI.execute(call, scope, onSuccess = { r ->
                 _loggingIn.value = false
                 scope.launch {
                     _store!!.setUser(r.user.username, r.user.oid, r.token, r.user.password)
-                    _closeNow.value = true
                     onAuth()
                 }
             }, onError = { e ->

@@ -1,10 +1,8 @@
 package com.biztools.stockcount.api
 
 import com.biztools.stockcount.models.AddItemsInput
-import com.biztools.stockcount.models.CheckPromoResult
-//import com.biztools.stockcount.models.GetWarehousesResult
+import com.biztools.stockcount.models.GetWarehousesResult
 import com.biztools.stockcount.models.ItemInfo
-import com.biztools.stockcount.models.ItemOnHandResult
 import com.biztools.stockcount.models.ItemsResult
 import com.biztools.stockcount.models.PrintBarcodesInput
 import com.biztools.stockcount.models.PrintBarcodesResult
@@ -22,23 +20,6 @@ interface StockApi {
     @POST("stock/save-stock-file")
     fun saveStockFile(@Body input: StockCountBatchInput): Call<SaveStockResult>
 
-    @GET("stock/check-item-on-hand")
-    fun checkOnHand(
-        @Query("number") number: String,
-    ): Call<ItemOnHandResult>
-
-    @GET("stock/check-item-promotions")
-    fun checkPromo(
-        @Query("number") number: String,
-    ): Call<CheckPromoResult>
-
-    @GET("stock/search-items")
-    fun searchItems(
-        @Query("search") search: String,
-        @Query("page") page: Int,
-        @Query("take") take: Int
-    ): Call<ItemOnHandResult>
-
     @GET("stock/check-item-info")
     fun checkItemInfo(
         @Query("warehouse") warehouse: String,
@@ -49,7 +30,7 @@ interface StockApi {
     fun checkItemInfoNonStrict(@Query("number") number: String): Call<ItemInfo>
 
     @GET("stock/items")
-    fun getItems(@Query("page") page: Int = 1, @Query("count") count: Int = 200): Call<ItemsResult>
+    fun getItems(@Query("page") page: Int = 1, @Query("count") count: Int = 0): Call<ItemsResult>
 
     @GET("stock/get-rate-cards")
     fun getRateCards(): Call<List<RateCard>>
@@ -57,8 +38,8 @@ interface StockApi {
     @POST("stock/print-batch-barcodes")
     fun printBatchBarcodes(@Body input: PrintBarcodesInput): Call<PrintBarcodesResult>
 
-//    @GET("stock/warehouses")
-//    fun getWarehouses(): Call<GetWarehousesResult>
+    @GET("stock/warehouses")
+    fun getWarehouses(): Call<GetWarehousesResult>
 
     @POST("stock/create-po")
     fun createPO(@Body input: StockOrderInput): Call<PrintBarcodesResult>

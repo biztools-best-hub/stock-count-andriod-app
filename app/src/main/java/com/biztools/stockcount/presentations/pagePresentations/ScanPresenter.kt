@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -44,8 +45,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -53,9 +55,9 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.navigation.NavHostController
 import com.biztools.stockcount.models.GetWarehousesResult
 import com.biztools.stockcount.models.Item
-import com.biztools.stockcount.models.OnHandItem
 import com.biztools.stockcount.models.ReservedBarcodeData
 import com.biztools.stockcount.models.Warehouse
+import com.biztools.stockcount.presentations.layoutPresentations.BasePresenter
 import com.biztools.stockcount.stores.BarcodesStore
 import com.biztools.stockcount.stores.SettingStore
 import com.biztools.stockcount.ui.extensions.bestBg
@@ -72,14 +74,14 @@ import java.io.File
 @OptIn(ExperimentalPermissionsApi::class)
 @ExperimentalGetImage
 class ScanPresenter(
-    val ctx: Context? = null,
-    val scope: CoroutineScope? = null,
-    val setting: SettingStore? = null,
-    val navigator: NavHostController? = null,
-    val page: MutableState<String>? = null,
-    val drawer: DrawerState? = null,
+    ctx: Context? = null,
+    scope: CoroutineScope? = null,
+    setting: SettingStore? = null,
+    navigator: NavHostController? = null,
+    page: MutableState<String>? = null,
+    drawer: DrawerState? = null,
     private val warehouses: GetWarehousesResult,
-) {
+) : BasePresenter(ctx, scope, setting, navigator, page, drawer) {
     private var _lifecycleOwner: LifecycleOwner? = null
     private var _cameraPermission: PermissionState? = null
     private var _preview: MutableState<Preview?> = mutableStateOf(null)
@@ -95,12 +97,11 @@ class ScanPresenter(
     private var _warehouse: MutableState<Warehouse?> = mutableStateOf(null)
     private var _isAutoScan: State<Boolean> = mutableStateOf(false)
     private var _checkingOffline: MutableState<Boolean> = mutableStateOf(false)
+    private var _notFound: MutableState<Boolean> = mutableStateOf(false)
     private var _showRaw: MutableState<Boolean> = mutableStateOf(false)
-    private var _isKeepingCode: MutableState<Boolean> = mutableStateOf(false)
     private var _scanByScanner: MutableState<Boolean> = mutableStateOf(false)
     private var _offline: MutableState<Boolean> = mutableStateOf(true)
     private var _doneRead: MutableState<Boolean> = mutableStateOf(false)
-    private var _errMsg = mutableStateOf("")
     private var _showCamera = mutableStateOf(true)
     private var _readingFile = mutableStateOf(false)
     private var _items = mutableStateListOf<Item>()
@@ -118,29 +119,28 @@ class ScanPresenter(
     val offline get() = _offline.value
     val items get() = _items
     val barcode get() = _barcode
-    val cameraGranted get() = _cameraPermission?.hasPermission == true
+    val cameraGranted get() = _cameraPermission?.hasPermission ?: false
     val scanCount get() = _scanCount
-    val errorMessage get() = _errMsg.value
+    val notFound get() = _notFound.value
+    val startNotFound: () -> Unit = { _notFound.value = true }
     val showExternal get() = _showExternal.value
     val startShowExternal: () -> Unit = { _showExternal.value = true }
     val hideExternal: () -> Unit = { _showExternal.value = false }
-    val isKeepingCode get() = _isKeepingCode.value
-    val stopNotFoundAndStopUseKit: () -> Unit = {
-        _errMsg.value = ""
+    val stopNotFound: () -> Unit = {
+        _notFound.value = false
         startShowExternal()
     }
     val checkingOffline get() = _checkingOffline.value
+
     private var _canScan = mutableStateOf(false)
     private var _format = mutableStateOf<Int?>(null)
-
-    @Composable
-    fun Render() {
+    override val render: @Composable (content: (() -> Unit)?) -> Unit = {
         _isAutoScan = setting!!.isAutoScanMode.collectAsState(initial = false)
         _offline = remember { mutableStateOf(true) }
         _doneRead = remember { mutableStateOf(false) }
         _readingFile = remember { mutableStateOf(false) }
+        _notFound = remember { mutableStateOf(false) }
         _items = remember { mutableStateListOf() }
-        _errMsg = remember { mutableStateOf("") }
         _warehouse = remember { mutableStateOf(null) }
         _captureImage = remember { mutableStateOf(null) }
         _manualQty = remember { mutableStateOf(1) }
@@ -152,12 +152,11 @@ class ScanPresenter(
         _canScan = remember { mutableStateOf(false) }
         _checkingOffline = remember { mutableStateOf(false) }
         _showRaw = remember { mutableStateOf(false) }
-        _isKeepingCode = remember { mutableStateOf(false) }
         _scanByScanner = remember { mutableStateOf(false) }
         _barcode = remember { mutableStateOf("") }
         _density = LocalDensity.current
         _cropSize = remember { mutableStateOf(Animatable(300.dp.value / 5)) }
-        _lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+        _lifecycleOwner = LocalLifecycleOwner.current
         _cameraPermission = rememberPermissionState(permission = Manifest.permission.CAMERA)
         _scanCount = remember { mutableIntStateOf(0) }
         _store = BarcodesStore(ctx!!)
@@ -165,9 +164,13 @@ class ScanPresenter(
         _initializing = remember(_barcodes!!.value)
         { mutableStateOf(_barcodes!!.value == null) }
         val expanded = remember { mutableStateOf(false) }
+
         DisposableEffect(_cameraProvider.value) {
             onDispose { _cameraProvider.value?.unbindAll() }
         }
+//        LaunchedEffect(Unit) {
+//            readFile()
+//        }
         if (!_canScan.value && !_scanByScanner.value) Column(
             Modifier
                 .fillMaxSize()
@@ -210,13 +213,11 @@ class ScanPresenter(
                     Box(
                         modifier = Modifier.fillMaxWidth()
                     ) {
-//                        val config = LocalConfiguration.current
-                        val info = LocalWindowInfo.current
+                        val config = LocalConfiguration.current
                         DropdownMenu(
                             expanded = expanded.value,
                             onDismissRequest = { expanded.value = false },
-//                            modifier = Modifier.width(config.screenWidthDp.dp - 20.dp)
-                            modifier = Modifier.width(info.containerSize.width.dp - 20.dp)
+                            modifier = Modifier.width(config.screenWidthDp.dp - 20.dp)
                         ) {
                             repeat(warehouses.warehouses.size) {
                                 DropdownMenuItem(
@@ -270,6 +271,11 @@ class ScanPresenter(
                 val show = remember {
                     mutableStateOf(false)
                 }
+//                LaunchedEffect(_lines) {
+//                    if (_lines.isNotEmpty()) {
+//                        show.value = true
+//                    }
+//                }
                 if (show.value) {
                     Dialog(onDismissRequest = { show.value = false }) {
                         Box(
@@ -281,6 +287,11 @@ class ScanPresenter(
                                 modifier = Modifier.fillMaxSize(),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
+                                LazyColumn(modifier = Modifier.weight(1f)) {
+//                                    items(_lines.size, key = { k -> lines[k] }) {
+//                                        Text(text = _items[it].itemNumber)
+//                                    }
+                                }
                                 Button(onClick = { show.value = false }) {
                                     Text(text = "close")
                                 }
@@ -289,6 +300,16 @@ class ScanPresenter(
                         }
                     }
                 }
+//                if (_readingFile.value) {
+//                    Spacer(modifier = Modifier.height(10.dp))
+//                    val dots = remember { mutableStateOf("") }
+//                    LaunchedEffect(dots.value) {
+//                        delay(100L)
+//                        if (dots.value == "...") dots.value = ""
+//                        else dots.value += "."
+//                    }
+//                    Text(text = "Reading file$dots")
+//                }
             }
             Row(
                 modifier = Modifier
@@ -308,7 +329,7 @@ class ScanPresenter(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) { Text(text = "Initializing...") }
-        else Scan(this)
+        else super.render { Scan(this) }
     }
 
     private fun readFile() {
@@ -316,65 +337,34 @@ class ScanPresenter(
         val file = File(ctx!!.filesDir, fileName)
         if (file.exists()) {
             _readingFile.value = true
+//            val tempLines = mutableListOf<String>()
             val lines = file.readLines().reversed()
             if (_items.isNotEmpty()) _items.clear()
             for (l in lines) {
-                if (l.isEmpty()) continue
                 val chunks = l.split(";;").filter { c -> c.isNotEmpty() && c.isNotBlank() }
                     .map { c -> c.trim() }
-                val num = chunks[0]
-                val bc = chunks[1]
-                val useKit = chunks[2]
-                val name = chunks[3]
-                val description = chunks[4]
-                if (num.isEmpty() && bc.isEmpty()) continue
-                _items.add(
-                    Item(
-                        itemNumber = num,
-                        barcode = bc,
-                        name = name,
-                        useKit = useKit.toBoolean(),
-                        description
-                    )
-                )
+                val n = if (chunks.isEmpty()) "" else chunks[0]
+                val bc = if (chunks.size > 1) chunks[1] else ""
+                if (n.isEmpty() && bc.isEmpty()) continue
+                _items.add(Item(itemNumber = n, barcode = bc))
             }
+//            ctx!!.openFileInput(fileName).bufferedReader().useLines { l ->
+//                tempLines.add(l.fold("") { a, b -> "$a\n$b" })
+//            }
+//            if (tempLines.isNotEmpty()) {
+//                val chunks =
+//                    tempLines[0].split("\n").filter { s -> s.isNotEmpty() && s.isNotBlank() }
+//                _items.addAll(chunks.map { c ->
+//                    val sub = c.split(";;")
+//                    Item(itemNumber = sub[0], barcode = if (sub[1] == "null") "" else sub[1])
+//                })
+//            }
             _readingFile.value = false
         }
         _doneRead.value = true
     }
 
-    fun searchItemsOffline(code: String, accurate: Boolean = false): List<OnHandItem> {
-        _checkingOffline.value = true
-        val file = File(ctx!!.filesDir, "conicalhat-items")
-        if (!file.exists()) {
-            _checkingOffline.value = false
-            return listOf()
-        }
-        val tLines = file.readLines()
-        if (tLines.isEmpty()) {
-            _checkingOffline.value = false
-            return listOf()
-        }
-        val oItems: MutableList<OnHandItem> = mutableListOf()
-        for (l in tLines) {
-            if (l.isEmpty()) continue
-            val chunks = l.split(";;").map { c -> c.trim() }
-            val num = if (chunks.isEmpty()) "" else chunks[0]
-            val bc = if (chunks.size < 2) "" else chunks[1]
-            val useKit = if (chunks.size < 3) "" else chunks[2]
-            val name = if (chunks.size < 4) "" else chunks[3]
-            val description = if (chunks.size < 5) "" else chunks[4]
-            val hasIt = if (accurate) num.equals(code, true) || bc.equals(code, true)
-            else num.contains(code, true) || bc.contains(code, true)
-            if (hasIt && oItems.all { x -> x.number != num }) {
-                oItems.add(OnHandItem(name, num, useKit == "1", description, code = bc))
-            }
-        }
-        _checkingOffline.value = false
-        return oItems
-    }
-
-    private fun checkItemOffline(code: String): Boolean {
+    fun checkItemOffline(code: String): Boolean {
         _checkingOffline.value = true
         val file = File(ctx!!.filesDir, "conicalhat-items")
         if (!file.exists()) {
@@ -386,30 +376,18 @@ class ScanPresenter(
             _checkingOffline.value = false
             return false
         }
-        var hasKit = false
-        var target: String? = null
         for (l in tLines) {
-            if (l.isEmpty()) continue
-            val chunks = l.split(";;").map { c -> c.trim() }
-            val num = if (chunks.isEmpty()) "" else chunks[0]
-            val bc = if (chunks.size < 2) "" else chunks[1]
-            val kit = if (chunks.size < 3) "0" else chunks[2]
-            if (num.lowercase() == code.lowercase() || bc.lowercase() == code.lowercase()) {
-                target = l
-                hasKit = kit == "1"
-                break
+            val chunks =
+                l.split(";;").filter { c -> c.isNotEmpty() && c.isNotBlank() }.map { c -> c.trim() }
+            val n = if (chunks.isEmpty()) "" else chunks[0]
+            val bc = if (chunks.size > 1) chunks[1] else ""
+            if (n == code || bc == code) {
+                _checkingOffline.value = false
+                return true
             }
         }
         _checkingOffline.value = false
-        val msg: String = if (hasKit) {
-            "You cannot count this item, because it uses kits"
-        } else if (target == null) {
-            "Couldn't find item with this barcode"
-        } else {
-            ""
-        }
-        _errMsg.value = msg
-        return msg.isEmpty()
+        return false
     }
 
     fun onExternalScanned(
@@ -421,7 +399,7 @@ class ScanPresenter(
         scope?.launch {
             _store?.modify(
                 ReservedBarcodeData(
-                    code,
+                    code = code,
                     warehouse = _warehouse.value!!.name,
                     count = count
                 )
@@ -435,77 +413,37 @@ class ScanPresenter(
     }
 
     fun onContinue() {
-        try {
-            val skipCount = _errMsg.value.startsWith("You cannot count")
-            _errMsg.value = ""
-            if (skipCount || _isAutoScan.value) {
-                _showCamera.value = true
-                _captureImage.value = null
-                if (!skipCount) {
-                    scope?.launch {
-                        _store!!.modify(
-                            ReservedBarcodeData(
-                                code = _barcode.value,
-                                warehouse = _warehouse.value!!.name
-                            )
-                        )
-                        _barcode.value = ""
-                    }
-                }
-                return
+        _notFound.value = false
+        if (_isAutoScan.value) {
+            _showCamera.value = true
+            _captureImage.value = null
+            scope?.launch {
+                _store!!.modify(
+                    ReservedBarcodeData(
+                        code = _barcode.value,
+                        warehouse = _warehouse.value!!.name
+                    )
+                )
+                _barcode.value = ""
             }
-        } catch (e: Exception) {
-            Toast.makeText(ctx, e.message, Toast.LENGTH_LONG).show()
+            return
         }
     }
 
     fun scanMore() {
         scope?.launch {
-            try {
-                if (_manualQty.value == null) _manualQty.value = 1
-                var inCode = _barcode.value
-                val exist = _barcodes?.value?.isNotEmpty() == true && _barcodes!!.value!!.any { c ->
-                    c.code.equals(
-                        inCode,
-                        true
-                    )
-                }
-                if (_offline.value && !exist) {
-                    _isKeepingCode.value = true
-                    val file = File(ctx!!.filesDir, "conicalhat-items")
-                    if (file.exists()) {
-                        val tLines = file.readLines()
-                        if (tLines.isNotEmpty()) {
-                            for (l in tLines) {
-                                if (l.isEmpty()) continue
-                                val chunks = l.split(";;").map { c -> c.trim() }
-                                val num = if (chunks.isEmpty()) "" else chunks[0]
-                                val bc = if (chunks.size < 2) "" else chunks[1]
-                                if (!num.equals(inCode, true) && !bc.equals(
-                                        inCode,
-                                        true
-                                    )
-                                ) continue
-                                inCode = num
-                            }
-                        }
-                    }
-                }
-                _store!!.modify(
-                    ReservedBarcodeData(
-                        code = inCode,
-                        warehouse = _warehouse.value!!.name,
-                        count = _manualQty.value ?: 1
-                    )
+            if (_manualQty.value == null) _manualQty.value = 1
+            _store!!.modify(
+                ReservedBarcodeData(
+                    code = _barcode.value,
+                    warehouse = _warehouse.value!!.name,
+                    count = _manualQty.value ?: 1
                 )
-                delay(100)
-                _isKeepingCode.value = false
-                _barcode.value = ""
-                _manualQty.value = 1
-                _showCamera.value = true
-            } catch (e: Exception) {
-                Toast.makeText(ctx, e.message, Toast.LENGTH_LONG).show()
-            }
+            )
+            delay(100)
+            _barcode.value = ""
+            _manualQty.value = 1
+            _showCamera.value = true
         }
     }
 
@@ -516,33 +454,29 @@ class ScanPresenter(
     }
 
     fun onCodeDetected(c: String) {
-        try {
-            _barcode.value = c
-            _errMsg.value = ""
-            if (_offline.value && !checkItemOffline(c)) {
-                _showCamera.value = false
-                return
-            }
-            val count = _barcodes!!.value!!
-                .firstOrNull { d -> d.code == c }?.count
-            _scanCount.intValue = if (count == null) 1 else count + 1
-            if (_isAutoScan.value) {
-                try {
-                    scope?.launch {
-                        _store!!.modify(
-                            ReservedBarcodeData(
-                                code = c,
-                                warehouse = _warehouse.value!!.name
-                            )
-                        )
-                    }
-                } catch (e: Exception) {
-                    Toast.makeText(ctx!!, e.message, Toast.LENGTH_LONG).show()
-                }
-            } else _showCamera.value = false
-        } catch (e: Exception) {
-            Toast.makeText(ctx, e.message, Toast.LENGTH_LONG).show()
+        _barcode.value = c
+        if (_offline.value && !checkItemOffline(c)) {
+            _notFound.value = true
+            _showCamera.value = false
+            return
         }
+        val count = _barcodes!!.value!!
+            .firstOrNull { d -> d.code == c }?.count
+        _scanCount.intValue = if (count == null) 1 else count + 1
+        if (_isAutoScan.value) {
+            try {
+                scope?.launch {
+                    _store!!.modify(
+                        ReservedBarcodeData(
+                            code = c,
+                            warehouse = _warehouse.value!!.name
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                Toast.makeText(ctx!!, e.message, Toast.LENGTH_LONG).show()
+            }
+        } else _showCamera.value = false
     }
 
     fun onStartAnalyze(image: Bitmap, format: Int) {

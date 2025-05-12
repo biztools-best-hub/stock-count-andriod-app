@@ -34,7 +34,7 @@ class MainActivity : ComponentActivity() {
                 page.value = dest.route ?: "menu"
             }
             val drawer = rememberDrawerState(initialValue = DrawerValue.Closed)
-            MainPresenter(this, scope, setting, navigator, page, drawer).Render()
+            MainPresenter(this, scope, setting, navigator, page, drawer).render(null)
         }
     }
 }
