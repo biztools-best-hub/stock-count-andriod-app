@@ -1,12 +1,9 @@
 package com.biztools.stockcount.ui.pages
 
-import android.widget.Toast
 import androidx.camera.core.ExperimentalGetImage
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,8 +19,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -36,12 +31,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -61,16 +52,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.biztools.stockcount.R
-import com.biztools.stockcount.api.RestAPI
-import com.biztools.stockcount.api.StockApi
-import com.biztools.stockcount.models.ItemOnHandResult
-import com.biztools.stockcount.models.OnHandItem
 import com.biztools.stockcount.presentations.pagePresentations.ScanPresenter
 import com.biztools.stockcount.ui.components.CircularLoading
 import com.biztools.stockcount.ui.extensions.bestBg
@@ -84,21 +68,6 @@ fun Scan(presenter: ScanPresenter) {
         if (presenter.cameraGranted) return@LaunchedEffect
         presenter.requestPermission()
     }
-    var isChecking by remember { mutableStateOf(false) }
-    var checkByScroll by remember { mutableStateOf(false) }
-    var showDialog by remember { mutableStateOf(false) }
-    var selectedNumber by remember { mutableStateOf("") }
-    val listState = rememberLazyListState()
-    val reachedBottom: Boolean by remember {
-        derivedStateOf {
-            val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()
-            lastVisibleItem != null && lastVisibleItem.index >= 10 && lastVisibleItem.index + 1 > listState.layoutInfo.totalItemsCount - 1
-        }
-    }
-    var onHandResult by remember { mutableStateOf<ItemOnHandResult?>(null) }
-    val reservedItems = remember { mutableListOf<OnHandItem>() }
-    var currentPage by remember { mutableIntStateOf(0) }
-    var prevPage by remember { mutableIntStateOf(0) }
     val externalCode = remember {
         mutableStateOf("")
     }
@@ -118,124 +87,16 @@ fun Scan(presenter: ScanPresenter) {
     val externalAdded = remember {
         mutableStateOf(false)
     }
-
-    fun onSuccessCall(res: ItemOnHandResult) {
-        onHandResult = res
-        isChecking = false
-        if (res.items.isNotEmpty()) {
-            reservedItems.addAll(res.items.filter { reservedItems.all { r -> r.number != it.number } })
-            prevPage = currentPage
-            if (!checkByScroll) showDialog = true
-        } else if (!checkByScroll) showDialog = false
-    }
-
-    fun onSearchOffline(barcode: String) {
-        try {
-            if (barcode.isEmpty() || barcode.isBlank()) return
-            selectedNumber = ""
-            isChecking = true
-            if (onHandResult != null) {
-                val tempResult = onHandResult
-                tempResult!!.number = ""
-                onHandResult = tempResult
-            }
-            reservedItems.clear()
-            val items = presenter.searchItemsOffline(barcode)
-            if (items.isEmpty()) throw Exception("item not found")
-            val r = ItemOnHandResult(
-                number = "",
-                name = "",
-                oid = "",
-                description2 = "",
-                description = "",
-                price = 0.0,
-                brand = "",
-                group = "",
-                pdtCat = "",
-                subCat1 = "",
-                subCat2 = "",
-                subCat3 = "",
-                warehouses = listOf(),
-                totalSOH = 0.0,
-                wholeSalePrice = 0.0,
-                unitCost = 0.0,
-                items = presenter.searchItemsOffline(barcode)
-            )
-            isChecking = false
-            onSuccessCall(r)
-        } catch (e: Exception) {
-            Toast.makeText(presenter.ctx, e.message, Toast.LENGTH_LONG)
-                .show()
-            isChecking = false
-        }
-//        if (currentPage < 2) reservedItems.clear()
-    }
-
-    fun onSearch(barcode: String) {
-        if (barcode.isEmpty() || barcode.isBlank()) return
-        selectedNumber = ""
-        isChecking = true
-        if (onHandResult != null) {
-            val tempResult = onHandResult
-            tempResult!!.number = ""
-            onHandResult = tempResult
-        }
-        if (currentPage < 2) reservedItems.clear()
-//        if (checkPromoResult != null) {
-//            val tempPromo = checkPromoResult
-//            tempPromo!!.number = ""
-//            checkPromoResult = tempPromo
-//        }
-        try {
-            val searchApi = RestAPI.create<StockApi>()
-            val searchCall = searchApi.searchItems(barcode, currentPage, 20)
-            RestAPI.execute(
-                searchCall,
-                presenter.scope!!,
-                onSuccess = { res -> onSuccessCall(res) },
-                onError = { e ->
-                    Toast.makeText(presenter.ctx, e.message, Toast.LENGTH_LONG).show()
-                    isChecking = false
-                })
-        } catch (e: Exception) {
-            Toast.makeText(presenter.ctx, e.message, Toast.LENGTH_LONG)
-                .show()
-            isChecking = false
-        }
-    }
-    LaunchedEffect(reservedItems.size) {
-        if (reservedItems.size > 0 && checkByScroll) {
-            listState.animateScrollBy(60f)
-        }
-    }
-
-    LaunchedEffect(reachedBottom) {
-        if (reachedBottom) {
-            currentPage += 1
-            checkByScroll = true
-            if (presenter.offline) {
-                onSearchOffline(externalCode.value)
-            } else {
-                onSearch(externalCode.value)
-            }
-        }
-    }
-    LaunchedEffect(showDialog) {
-        if (!showDialog && onHandResult != null) {
-            listState.scrollToItem(0)
-            onHandResult = null
-            currentPage = 1
-            checkByScroll = false
-            reservedItems.clear()
-        }
-    }
+//    val showExternal = remember {
+//        mutableStateOf(false)
+//    }
 
     if (presenter.cameraGranted && !presenter.showRaw && !presenter.scanByScanner && !presenter.showExternal) Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            if ((presenter.isAutoScan.value || presenter.showCamera.value) && presenter.errorMessage.isEmpty()) {
+            if ((presenter.isAutoScan.value || presenter.showCamera.value) && !presenter.notFound) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     Box(modifier = Modifier.weight(1f)) {
                         CameraBox(
@@ -272,7 +133,7 @@ fun Scan(presenter: ScanPresenter) {
                     }
                 }
             } else {
-                if (presenter.errorMessage.isEmpty()) Column(
+                if (!presenter.notFound) Column(
                     Modifier
                         .fillMaxSize()
                         .bestBg()
@@ -339,14 +200,12 @@ fun Scan(presenter: ScanPresenter) {
                     ) {
                         Button(
                             onClick = { presenter.discard() },
-                            enabled = !presenter.isKeepingCode,
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(Color.Gray)
                         ) { Text(text = "Discard") }
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
                             onClick = { presenter.scanMore() },
-                            enabled = !presenter.isKeepingCode,
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(Color(0xFF678F39))
                         ) { Text(text = "Save") }
@@ -399,7 +258,7 @@ fun Scan(presenter: ScanPresenter) {
                                 }
                                 Text(text = presenter.barcode.value)
                                 Text(
-                                    text = presenter.errorMessage,
+                                    text = "Couldn't find item with this barcode",
                                     fontWeight = FontWeight.Bold
                                 )
                                 Button(
@@ -415,7 +274,6 @@ fun Scan(presenter: ScanPresenter) {
             }
         }
     } else if (presenter.scanByScanner && !presenter.showExternal) {
-        //----------------------------------------------------this
         Column(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
@@ -474,155 +332,33 @@ fun Scan(presenter: ScanPresenter) {
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                             keyboardActions = KeyboardActions(onDone = {
                                 keyboardCtrl?.hide()
-//                                if (presenter.offline && !presenter.checkItemOffline(externalCode.value)) {
-//                                    presenter.startNotFound()
-//                                }
-//                                currentPage = 1
-                                if (presenter.offline) {
-                                    onSearchOffline(externalCode.value)
+                                if (presenter.offline && !presenter.checkItemOffline(externalCode.value)) {
+                                    presenter.startNotFound()
                                 } else {
-                                    onSearch(externalCode.value)
 //                                    presenter.startShowExternal()
-//                                    if (presenter.isAutoScan.value) presenter.onExternalScanned(
-//                                        externalCode.value,
-//                                        onAdded = {
-//                                            externalAdded.value = true
-//                                        },
-//                                        afterDelay = {
-//                                            externalAdded.value = false
-//                                            externalCode.value = ""
-//                                        })
-//                                    else presenter.startShowExternal()
+                                    if (presenter.isAutoScan.value) presenter.onExternalScanned(
+                                        externalCode.value,
+                                        onAdded = {
+                                            externalAdded.value = true
+                                        },
+                                        afterDelay = {
+                                            externalAdded.value = false
+                                            externalCode.value = ""
+                                        })
+                                    else presenter.startShowExternal()
                                 }
                             })
                         )
                     }
                     if (presenter.isAutoScan.value) {
                         if (externalCode.value.isEmpty()) Text(text = "Waiting for scan result")
-                        else if (selectedNumber.isNotEmpty()) {
-                            Text(text = selectedNumber)
+                        else {
+                            Text(text = externalCode.value)
                             if (externalAdded.value) Text(text = "This barcode is added to temporary list")
                             else Text(text = "Adding to temporary list...")
                         }
                     } else Text(text = "Waiting for scan result")
-                    if (showDialog) {
-                        Dialog(
-                            onDismissRequest = {
-                                if (!isChecking) {
-                                    showDialog = false
-                                }
-                            },
-                            DialogProperties()
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(5.dp))
-                                    .fillMaxWidth()
-                                    .background(Color(0xFFFFFFFF))
-                                    .padding(horizontal = 5.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .padding(5.dp),
-                                    verticalArrangement = Arrangement.spacedBy(5.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        Text(
-                                            text = "Founded Items",
-                                            textAlign = TextAlign.Center
-                                        )
-                                    }
-                                    LazyColumn(
-                                        modifier = Modifier
-                                            .weight(1f, fill = false),
-                                        state = listState,
-                                        verticalArrangement = Arrangement.spacedBy(5.dp)
-                                    ) {
-                                        items(
-                                            reservedItems.size,
-                                            key = { k -> reservedItems[k].number }) { i ->
-                                            Row(
-                                                modifier = Modifier
-                                                    .clickable {
-                                                        if (!reservedItems[i].useKit) {
-                                                            showDialog = false
-                                                            if (presenter.isAutoScan.value) presenter.onExternalScanned(
-                                                                reservedItems[i].number,
-                                                                onAdded = {
-                                                                    externalAdded.value = true
-                                                                },
-                                                                afterDelay = {
-                                                                    externalAdded.value = false
-                                                                    externalCode.value = ""
-                                                                })
-                                                            else {
-                                                                selectedNumber =
-                                                                    reservedItems[i].number
-                                                                presenter.startShowExternal()
-                                                            }
-                                                        }
-                                                    }
-                                                    .border(
-                                                        width = 1.dp,
-                                                        color = Color.Gray,
-                                                        shape = RoundedCornerShape(4.dp)
-                                                    )
-                                                    .padding(5.dp)
-                                                    .fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween
-                                            ) {
-                                                val tail =
-                                                    if (reservedItems[i].useKit) " (use kit)" else ""
-                                                if (reservedItems[i].useKit) {
-                                                    Text(
-                                                        text = "${reservedItems[i].number}: ${reservedItems[i].name}${tail}",
-                                                        lineHeight = 15.sp,
-                                                        color = Color(0xFFDE4040)
-                                                    )
-                                                } else {
-                                                    Text(
-                                                        text = "${reservedItems[i].number}: ${reservedItems[i].name}${tail}",
-                                                        lineHeight = 15.sp
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                    if (isChecking && checkByScroll) {
-                                        Box(
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .height(20.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            CircularLoading(Modifier.size(20.dp))
-                                        }
-                                    }
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        Button(
-                                            enabled = !isChecking,
-                                            onClick = {
-                                                showDialog = false
-                                            },
-                                            colors = ButtonDefaults.buttonColors(
-                                                Color(
-                                                    0xFF25608F
-                                                )
-                                            ),
-                                        ) { Text(text = "Close") }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (presenter.checkingOffline || isChecking) {
+                    if (presenter.checkingOffline) {
                         CircularLoading(Modifier.size(30.dp))
                     }
                 }
@@ -644,7 +380,7 @@ fun Scan(presenter: ScanPresenter) {
                 ) { Text(text = "Check list") }
             }
         }
-        if (presenter.errorMessage.isNotEmpty()) Dialog(onDismissRequest = { presenter.stopNotFoundAndStopUseKit() }) {
+        if (presenter.notFound) Dialog(onDismissRequest = { presenter.stopNotFound() }) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(
                     modifier = Modifier
@@ -662,11 +398,11 @@ fun Scan(presenter: ScanPresenter) {
                     )
                     Text(text = externalCode.value)
                     Text(
-                        text = presenter.errorMessage,
+                        text = "Couldn't find item with this barcode",
                         fontWeight = FontWeight.Bold
                     )
                     Button(
-                        onClick = { presenter.stopNotFoundAndStopUseKit() },
+                        onClick = { presenter.stopNotFound() },
                         colors = ButtonDefaults.buttonColors(
                             Color(0xFF23547A)
                         )
@@ -680,7 +416,7 @@ fun Scan(presenter: ScanPresenter) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Image(
-                painter = painterResource(id = R.drawable.camera_denied_black),
+                painter = painterResource(id = if (presenter.isDarkTheme) R.drawable.camera_denied_white else R.drawable.camera_denied_black),
                 contentDescription = "permission denied",
                 modifier = Modifier
                     .scale(1.2f)
@@ -703,7 +439,7 @@ fun Scan(presenter: ScanPresenter) {
                         Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
-                    ) { Text(text = selectedNumber) }
+                    ) { Text(text = externalCode.value) }
                     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Text(text = "Quantity")
                         BasicTextField(
@@ -725,7 +461,7 @@ fun Scan(presenter: ScanPresenter) {
                             keyboardActions = KeyboardActions(onDone = {
                                 keyboardCtrl?.hide()
                                 presenter.onExternalScanned(
-                                    selectedNumber,
+                                    externalCode.value,
                                     externalCount.value.toIntOrNull() ?: 1,
                                     onAdded = {
                                         externalCode.value = ""
@@ -753,7 +489,7 @@ fun Scan(presenter: ScanPresenter) {
                     onClick = {
                         keyboardCtrl?.hide()
                         presenter.onExternalScanned(
-                            selectedNumber,
+                            externalCode.value,
                             externalCount.value.toIntOrNull() ?: 1,
                             onAdded = {
                                 externalCode.value = ""

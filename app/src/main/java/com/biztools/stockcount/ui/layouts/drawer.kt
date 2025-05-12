@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
@@ -38,7 +39,6 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,8 +50,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.biztools.stockcount.R
 import com.biztools.stockcount.presentations.layoutPresentations.DrawerPresenter
-import com.biztools.stockcount.stores.SecurityStore
-import com.biztools.stockcount.stores.UserStore
 import com.biztools.stockcount.ui.components.CircularLoading
 import com.biztools.stockcount.ui.extensions.bestBg
 import com.biztools.stockcount.ui.theme.BackgroundAccent
@@ -61,11 +59,10 @@ import kotlin.system.exitProcess
 
 @Composable
 fun Drawer(presenter: DrawerPresenter) {
-    val dev = SecurityStore(presenter.ctx).device.collectAsState(initial = null)
-    val user = UserStore(presenter.ctx).user.collectAsState(initial = null)
+
     ModalNavigationDrawer(
-        gesturesEnabled = presenter.drawer.isOpen,
-        drawerState = presenter.drawer,
+        gesturesEnabled = presenter.isDrawerOpen,
+        drawerState = presenter.drawer!!,
         drawerContent = {
             ModalDrawerSheet(
                 Modifier
@@ -105,7 +102,7 @@ fun Drawer(presenter: DrawerPresenter) {
                                 contentDescription = "user",
                                 modifier = Modifier.size(60.dp),
                             )
-                            if (user.value == null || presenter.isUnauth) {
+                            if (presenter.user == null || presenter.isUnauth) {
                                 TextButton(onClick = { presenter.nowLogin() }) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(text = "LOGIN", fontSize = 20.sp)
@@ -116,7 +113,7 @@ fun Drawer(presenter: DrawerPresenter) {
                                     }
                                 }
                             } else Column {
-                                Text(text = user.value!!.username, fontSize = 18.sp)
+                                Text(text = presenter.user!!.username, fontSize = 18.sp)
                                 Button(
                                     onClick = { presenter.onLogout() },
                                     contentPadding = PaddingValues(0.dp),
@@ -139,7 +136,7 @@ fun Drawer(presenter: DrawerPresenter) {
                 }
                 Divider(modifier = Modifier.padding(horizontal = 16.dp))
                 Spacer(modifier = Modifier.height(10.dp))
-                presenter.RenderItem(false,
+                presenter.renderItem(false,
                     {
                         Row(
                             Modifier.fillMaxSize(),
@@ -152,11 +149,11 @@ fun Drawer(presenter: DrawerPresenter) {
                             contentDescription = "add-item",
                         )
                     }, {
-                        presenter.navigator.navigate("add-item")
-                        presenter.scope.launch { presenter.drawer.close() }
+                        presenter.navigator!!.navigate("add-item")
+                        presenter.scope!!.launch { presenter.drawer!!.close() }
                     }
                 )
-                presenter.RenderItem(false,
+                presenter.renderItem(false,
                     {
                         Row(
                             Modifier.fillMaxSize(),
@@ -170,11 +167,11 @@ fun Drawer(presenter: DrawerPresenter) {
                             modifier = Modifier.size(20.dp)
                         )
                     }, {
-                        presenter.navigator.navigate("config")
-                        presenter.scope.launch { presenter.drawer.close() }
+                        presenter.navigator!!.navigate("config")
+                        presenter.scope!!.launch { presenter.drawer!!.close() }
                     }
                 )
-                presenter.RenderItem(false,
+                presenter.renderItem(false,
                     {
                         Row(
                             Modifier.fillMaxSize(),
@@ -188,13 +185,13 @@ fun Drawer(presenter: DrawerPresenter) {
                             modifier = Modifier.size(20.dp)
                         )
                     }, {
-                        presenter.scope.launch {
-                            presenter.onDownload(dev.value ?: "")
-                            presenter.drawer.close()
+                        presenter.scope!!.launch {
+                            presenter.onDownload()
+                            presenter.drawer!!.close()
                         }
                     }
                 )
-                presenter.RenderItem(false,
+                presenter.renderItem(false,
                     {
                         Row(
                             Modifier.fillMaxSize(),
@@ -212,7 +209,7 @@ fun Drawer(presenter: DrawerPresenter) {
                         )
                     }, { presenter.toggleScanMode() }
                 )
-                presenter.RenderItem(
+                presenter.renderItem(
                     false,
                     { Text(text = "Exit") }, {
                         Icon(
@@ -227,14 +224,20 @@ fun Drawer(presenter: DrawerPresenter) {
                     })
             }
         }) {
-        presenter.Content()
+        presenter.content()
     }
-    if (presenter.showLogin) presenter.LoginBox(dev.value ?: "")
+    if (presenter.showLogin) presenter.loginBox()
     if (presenter.downloading || presenter.failedDownload || presenter.downloadSuccess) Dialog(
         onDismissRequest = {
             presenter.closeLoading()
         }) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+//            val dots = remember { mutableStateOf("") }
+//            LaunchedEffect(dots.value) {
+//                delay(200L)
+//                if (dots.value == "...") dots.value = ""
+//                else dots.value += "."
+//            }
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
@@ -265,7 +268,7 @@ fun Drawer(presenter: DrawerPresenter) {
                             horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
                             Button(
-                                onClick = { presenter.onDownload(dev.value ?: "") },
+                                onClick = { presenter.onDownload() },
                                 modifier = Modifier.weight(1f),
                                 colors = ButtonDefaults.buttonColors(Color(0xFF4B6928))
                             ) { Text(text = "Yes") }
@@ -291,6 +294,24 @@ fun Drawer(presenter: DrawerPresenter) {
                         ) { Text(text = "OK") }
                     }
                 }
+            }
+        }
+    }
+    if (presenter.showFile) Dialog(onDismissRequest = { presenter.closeFile() }) {
+        LazyColumn(
+            modifier = Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .fillMaxSize()
+                .bestBg()
+                .padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            item { Text(text = "total lines: ${presenter.items.size}") }
+            items(presenter.items.size, key = { k -> presenter.items[k].itemNumber }) {
+                val barcode =
+                    if (presenter.items[it].barcode.isEmpty() || presenter.items[it].barcode.isBlank()) "" else "(${presenter.items[it].barcode})"
+//                Text(text = "${presenter.items[it].itemNumber}$barcode")
+                Text(text = presenter.rawItems[it])
             }
         }
     }

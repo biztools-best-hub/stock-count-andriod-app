@@ -27,6 +27,7 @@ import com.biztools.stockcount.models.GetWarehousesResult
 import com.biztools.stockcount.models.ItemInfo
 import com.biztools.stockcount.models.User
 import com.biztools.stockcount.presentations.layoutPresentations.AuthPresenter
+import com.biztools.stockcount.presentations.layoutPresentations.BasePresenter
 import com.biztools.stockcount.stores.SettingStore
 import com.biztools.stockcount.stores.UserStore
 import com.biztools.stockcount.ui.pages.PriceChecker
@@ -38,18 +39,17 @@ import kotlinx.coroutines.CoroutineScope
 @ExperimentalGetImage
 @OptIn(ExperimentalPermissionsApi::class)
 class PriceCheckPresenter(
-    val ctx: Context,
-    val scope: CoroutineScope,
-    val setting: SettingStore,
-    val navigator: NavHostController,
-    val page: MutableState<String>,
-    val drawer: DrawerState,
+    ctx: Context? = null,
+    scope: CoroutineScope? = null,
+    setting: SettingStore? = null,
+    navigator: NavHostController? = null,
+    page: MutableState<String>? = null,
+    drawer: DrawerState? = null,
     val warehouse: GetWarehousesResult,
+    private val device: String = "",
     val onUnauth: () -> Unit,
-    val onAuth: () -> Unit
-)
-//    : BasePresenter(ctx, scope, setting, navigator, page, drawer)
-{
+    onAuth: () -> Unit
+) : BasePresenter(ctx, scope, setting, navigator, page, drawer) {
     private var _cameraPermission: PermissionState? = null
     private var _lifecycleOwner: LifecycleOwner? = null
     private var _user: State<User?> = mutableStateOf(null)
@@ -72,25 +72,18 @@ class PriceCheckPresenter(
     val cameraGranted get() = _cameraPermission?.hasPermission ?: false
     val selectedWarehouse get() = _selectedWarehouse.value
     val checking get() = _checking.value
-    fun resetCurrentItem() {
-        _currentItem.value = null;
-    }
-
-    fun updateBarcode(code: String) {
-        _barcode.value = code
-    }
-
-    fun onCodeDetected(code: String, dev: String) {
-        _barcode.value = code
+    val updateBarcode: (code: String) -> Unit = { c -> _barcode.value = c }
+    val onCodeDetected: (code: String) -> Unit = {
+        _barcode.value = it
         _showCamera.value = false
-        onCheckPrice(code, dev)
+        onCheckPrice()
     }
 
     fun onStartAnalyze(image: Bitmap, format: Int) {
         try {
             _captureImage.value = image
         } catch (e: Exception) {
-            Toast.makeText(ctx, e.message, Toast.LENGTH_LONG).show()
+            Toast.makeText(ctx!!, e.message, Toast.LENGTH_LONG).show()
         }
         _format.value = format
     }
@@ -101,8 +94,7 @@ class PriceCheckPresenter(
         _barcode.value = ""
     }
 
-    @Composable
-    fun Render() {
+    override val render: @Composable (content: @Composable (() -> Unit)?) -> Unit = {
         _captureImage = remember { mutableStateOf(null) }
         _showCamera = remember { mutableStateOf(false) }
         _cropSize = remember { mutableStateOf(Animatable(300.dp.value / 5)) }
@@ -115,19 +107,22 @@ class PriceCheckPresenter(
         _format = remember { mutableStateOf(null) }
         _currentItem = remember { mutableStateOf(null) }
         _checking = remember { mutableStateOf(false) }
-        val store = UserStore(ctx)
+        val store = UserStore(ctx!!)
         _user = store.user.collectAsState(initial = null)
         DisposableEffect(_cameraProvider) {
             onDispose { _cameraProvider?.unbindAll() }
         }
-        AuthPresenter(
-            ctx = ctx,
-            scope = scope,
-            darkTheme = false,
-            navigator = navigator,
-            drawer = drawer,
-            onAuth = onAuth,
-        ) { PriceChecker(presenter = this) }.Initialize()
+        super.render {
+            AuthPresenter(
+                ctx = ctx,
+                scope = scope!!,
+                darkTheme = isDarkTheme,
+                navigator = navigator!!,
+                drawer = drawer!!,
+                device = device,
+                onAuth = onAuth,
+            ) { PriceChecker(presenter = this) }.Initialize()
+        }
     }
 
     val onQrClick: () -> Unit = { _showCamera.value = true }
@@ -136,17 +131,17 @@ class PriceCheckPresenter(
 
     val selectWarehouse: (name: String) -> Unit = { _selectedWarehouse.value = it }
     fun gotoAddItem() {
-        navigator.navigate("add-item?code=$barcode&fromRoute=${page.value}")
+        navigator!!.navigate("add-item?code=$barcode&fromRoute=${page!!.value}")
         _notFoundError.value = false
     }
 
-    private fun onCheckPrice(code: String, dev: String) {
+    fun onCheckPrice() {
         _checking.value = true
         _currentItem.value = null
         try {
-            val api = RestAPI.create<StockApi>(_user.value?.token, deviceId = dev)
-            val call = api.checkItemInfo(_selectedWarehouse.value!!, code)
-            RestAPI.execute(call, scope,
+            val api = RestAPI.create<StockApi>(_user.value?.token, deviceId = device)
+            val call = api.checkItemInfo(_selectedWarehouse.value!!, _barcode.value)
+            RestAPI.execute(call, scope!!,
                 onSuccess = { r ->
                     _currentItem.value = r
                     _checking.value = false
@@ -158,11 +153,11 @@ class PriceCheckPresenter(
                         _notFoundError.value = true
                     } else if (e.message?.startsWith("unauth") == true) {
                         onUnauth()
-                    } else Toast.makeText(ctx, e.message, Toast.LENGTH_LONG).show()
+                    } else Toast.makeText(ctx!!, e.message, Toast.LENGTH_LONG).show()
                 })
         } catch (e: Exception) {
             _checking.value = false
-            Toast.makeText(ctx, e.message, Toast.LENGTH_LONG).show()
+            Toast.makeText(ctx!!, e.message, Toast.LENGTH_LONG).show()
         }
     }
 }

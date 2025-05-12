@@ -12,41 +12,38 @@ import com.biztools.stockcount.ui.layouts.BottomBar
 import kotlinx.coroutines.CoroutineScope
 
 class BottomBarPresenter(
-    val ctx: Context? = null,
-    val scope: CoroutineScope? = null,
-    val setting: SettingStore? = null,
-    val navigator: NavHostController? = null,
-    val page: MutableState<String>? = null,
-    val drawer: DrawerState? = null,
-)
-//    : BasePresenter(ctx, scope, setting, navigator, page, drawer)
-{
-    @Composable
-    fun Render() {
-        BottomBar(this)
+    ctx: Context? = null,
+    scope: CoroutineScope? = null,
+    setting: SettingStore? = null,
+    navigator: NavHostController? = null,
+    page: MutableState<String>? = null,
+    drawer: DrawerState? = null,
+) : BasePresenter(ctx, scope, setting, navigator, page, drawer) {
+    override val render: @Composable (content: (() -> Unit)?) -> Unit = {
+        super.render { BottomBar(this) }
     }
-
-    @Composable
-    fun RenderItem(
+    val renderItem: @Composable (
         scope: RowScope,
         selected: Boolean,
+        label: @Composable () -> Unit,
         icon: @Composable () -> Unit,
         onClick: () -> Unit
-    ) {
+    ) -> Unit = { scope, selected, label, icon, click ->
         scope.BottomBarItem(
             isSelected = selected,
             icon = icon,
-        ) { onClick() }
+            label = label
+        ) { click() }
     }
 
     fun navigateTo(route: String) {
         if (navigator!!.currentDestination?.route != route) {
-            if (route == "menu") navigator.navigate("menu") {
+            if (route == "menu") navigator!!.navigate("menu") {
                 popUpTo("menu") {
                     inclusive = true
                 }
             }
-            else navigator.navigate(route)
+            else navigator!!.navigate(route)
         }
     }
 }

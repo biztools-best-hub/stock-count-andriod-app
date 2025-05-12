@@ -9,6 +9,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -45,8 +46,7 @@ fun Modifier.customShadow(
 //        ), start = Offset.Zero, end = Offset.Infinite
 //    )
 //)
-fun Modifier.bestBg(reverse: Boolean = false) =
-    this then background(if (reverse) Color.Black else Color.White)
+fun Modifier.bestBg(reverse: Boolean = false) = background(Color.White)
 
 
 fun Modifier.innerShadow(

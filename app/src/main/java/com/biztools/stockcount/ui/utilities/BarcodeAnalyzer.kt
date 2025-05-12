@@ -1,6 +1,5 @@
 package com.biztools.stockcount.ui.utilities
 
-import android.util.Size
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -28,7 +27,7 @@ class BarcodeAnalyzer(
                 onStartAnalyze(processNeededImage)
                 scanner.process(processNeededImage).addOnSuccessListener { barcodes ->
                     if (barcodes.isEmpty()) return@addOnSuccessListener
-                    onBarcodeDetected(barcodes, image.image!!.width)
+                    onBarcodeDetected(barcodes, image.width)
                 }.addOnFailureListener(onFailed).addOnCompleteListener { image.close() }
             }
             lastAnalysisTimestamp = currentTimestamp

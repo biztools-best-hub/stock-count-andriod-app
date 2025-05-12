@@ -61,8 +61,8 @@ import com.biztools.stockcount.models.DuplicateItemInput
 import com.biztools.stockcount.models.ReservedBarcodeData
 import com.biztools.stockcount.models.StockCountBatchInput
 import com.biztools.stockcount.models.StockCountInput
+import com.biztools.stockcount.presentations.layoutPresentations.BasePresenter
 import com.biztools.stockcount.stores.BarcodesStore
-import com.biztools.stockcount.stores.SecurityStore
 import com.biztools.stockcount.stores.SettingStore
 import com.biztools.stockcount.ui.components.CircularLoading
 import com.biztools.stockcount.ui.extensions.bestBg
@@ -78,14 +78,14 @@ import kotlinx.coroutines.launch
 data class DuplicateItemGroup(val warehouse: String, val items: List<DuplicateItem>)
 
 class ReservedCodesPresenter(
-    val ctx: Context,
-    val scope: CoroutineScope,
-    val setting: SettingStore,
-    val navigator: NavHostController,
-    val page: MutableState<String>,
-    val drawer: DrawerState,
-)
-{
+    ctx: Context? = null,
+    scope: CoroutineScope? = null,
+    setting: SettingStore? = null,
+    navigator: NavHostController? = null,
+    page: MutableState<String>? = null,
+    drawer: DrawerState? = null,
+    private val device: String = ""
+) : BasePresenter(ctx, scope, setting, navigator, page, drawer) {
     private var _store: BarcodesStore? = null
     private var _barcodes: State<List<ReservedBarcodeData>?>? = null
     val barcodes get() = _barcodes
@@ -100,10 +100,8 @@ class ReservedCodesPresenter(
     val needWarehouse get() = _needWarehouse.value
     val isFetching get() = _isFetching.value
     val notFoundItems get() = _notFoundItems
-
-    @Composable
-    fun Render() {
-        _store = BarcodesStore(ctx)
+    override val render: @Composable (content: (() -> Unit)?) -> Unit = {
+        _store = BarcodesStore(ctx!!)
         _barcodes = _store!!.codes.collectAsState(initial = null)
         _isFetching = remember { mutableStateOf(false) }
         _needWarehouse = remember { mutableStateOf(false) }
@@ -126,12 +124,10 @@ class ReservedCodesPresenter(
             mutableStateOf(_barcodes!!.value == null)
         }
         if (initializing.value) CircularLoading()
-        else ReservedCodes(this)
+        else super.render { ReservedCodes(this) }
     }
-
-    @Composable
-    fun ShowDecision() {
-        val dev = SecurityStore(ctx).device.collectAsState(initial = "")
+    val content: @Composable () -> Unit = {}
+    val showDecision: @Composable () -> Unit = {
         Dialog(
             onDismissRequest = { _needDecision.value = false },
             DialogProperties(
@@ -144,12 +140,18 @@ class ReservedCodesPresenter(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0xFFFFFFFF)),
+                    .background(
+                        if (isDarkTheme) Color(0xFF1F1E1E)
+                        else Color(0xFFFFFFFF)
+                    ),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Column(
                     modifier = Modifier
-                        .borderBottom(Color(0xFFBEBEBE))
+                        .borderBottom(
+                            color = if (isDarkTheme) Color(0xFF333333)
+                            else Color(0xFFBEBEBE)
+                        )
                         .fillMaxWidth()
                         .padding(top = 20.dp, start = 20.dp, end = 20.dp, bottom = 10.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -172,7 +174,10 @@ class ReservedCodesPresenter(
                             )
                         }
                     LazyColumn(modifier = Modifier
-                        .background(Color(0xFFD8D8D8))
+                        .background(
+                            if (isDarkTheme) Color(0xFF000000)
+                            else Color(0xFFD8D8D8)
+                        )
                         .fillMaxWidth()
                         .weight(1f)
                         .padding(10.dp),
@@ -185,7 +190,10 @@ class ReservedCodesPresenter(
                                 Column(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(5.dp))
-                                        .background(Color(0xFFFFFFFF))
+                                        .background(
+                                            if (isDarkTheme) Color(0xFF333232)
+                                            else Color(0xFFFFFFFF)
+                                        )
                                         .padding(10.dp)
                                 ) {
                                     Text(
@@ -197,11 +205,17 @@ class ReservedCodesPresenter(
                                             .fillMaxWidth()
                                             .padding(bottom = 10.dp)
                                         else if (j >= warehouses[i].items.size - 1) Modifier
-                                            .borderTop(Color(0xFFD8D8D8))
+                                            .borderTop(
+                                                color = if (isDarkTheme) Color(0xFF727272)
+                                                else Color(0xFFD8D8D8)
+                                            )
                                             .fillMaxWidth()
                                             .padding(top = 10.dp)
                                         else Modifier
-                                            .borderTop(Color(0xFFD8D8D8))
+                                            .borderTop(
+                                                color = if (isDarkTheme) Color(0xFF727272)
+                                                else Color(0xFFD8D8D8)
+                                            )
                                             .fillMaxWidth()
                                             .padding(top = 10.dp, bottom = 10.dp)
                                         val off = remember { Animatable(0f) }
@@ -216,7 +230,7 @@ class ReservedCodesPresenter(
                                         }
                                         LaunchedEffect(key1 = _currentItem.value) {
                                             if (_currentItem.value != null && _currentItem.value!!.productNumber == warehouses[i].items[j].productNumber) {
-                                                scope.launch {
+                                                scope!!.launch {
                                                     off.animateTo(
                                                         targetValue = when (_currentItem.value!!.decision) {
                                                             "m" -> 0f
@@ -238,15 +252,18 @@ class ReservedCodesPresenter(
                                                 mergeColor.value =
                                                     if (_currentItem.value!!.decision == "m")
                                                         Color(0xFFE7E7E7)
-                                                    else (Color(0xFF272727))
+                                                    else (if (isDarkTheme) Color(0xFF9C9B9B)
+                                                    else Color(0xFF272727))
                                                 replaceColor.value =
                                                     if (_currentItem.value!!.decision == "r")
                                                         Color(0xFFE7E7E7)
-                                                    else (Color(0xFF272727))
+                                                    else (if (isDarkTheme) Color(0xFF9C9B9B)
+                                                    else Color(0xFF272727))
                                                 ignoreColor.value =
                                                     if (_currentItem.value!!.decision == "i")
                                                         Color(0xFFE7E7E7)
-                                                    else (Color(0xFF272727))
+                                                    else (if (isDarkTheme) Color(0xFF9C9B9B)
+                                                    else Color(0xFF272727))
                                             }
                                         }
                                         Column(modifier) {
@@ -280,7 +297,7 @@ class ReservedCodesPresenter(
                                                                     interactionSource = NoRippleInteraction(),
                                                                     null,
                                                                     onClick = {
-                                                                        scope.launch {
+                                                                        scope!!.launch {
                                                                             _currentItem.value =
                                                                                 DuplicateItemInput(
                                                                                     productNumber = warehouses[i].items[j].productNumber,
@@ -310,7 +327,7 @@ class ReservedCodesPresenter(
                                                                     interactionSource = NoRippleInteraction(),
                                                                     null,
                                                                     onClick = {
-                                                                        scope.launch {
+                                                                        scope!!.launch {
                                                                             _currentItem.value =
                                                                                 DuplicateItemInput(
                                                                                     productNumber = warehouses[i].items[j].productNumber,
@@ -339,7 +356,7 @@ class ReservedCodesPresenter(
                                                                     interactionSource = NoRippleInteraction(),
                                                                     null,
                                                                     onClick = {
-                                                                        scope.launch {
+                                                                        scope!!.launch {
                                                                             _currentItem.value =
                                                                                 DuplicateItemInput(
                                                                                     productNumber = warehouses[i].items[j].productNumber,
@@ -384,7 +401,10 @@ class ReservedCodesPresenter(
                 }
                 Row(
                     modifier = Modifier
-                        .borderTop(Color(0xFFD8D8D8))
+                        .borderTop(
+                            color = if (isDarkTheme) Color(0xFF333333)
+                            else Color(0xFFD8D8D8)
+                        )
                         .fillMaxWidth()
                         .padding(top = 10.dp, start = 20.dp, end = 20.dp, bottom = 20.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -400,7 +420,7 @@ class ReservedCodesPresenter(
                         colors = ButtonDefaults.elevatedButtonColors(Color.Gray, Color.White)
                     ) { Text(text = "Cancel") }
                     ElevatedButton(
-                        onClick = { saveWhenDuplicate(dev.value ?: "") },
+                        onClick = { saveWhenDuplicate() },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.elevatedButtonColors(Color(0xFF5C7C36), Color.White)
                     ) { Text(text = "Save") }
@@ -410,14 +430,13 @@ class ReservedCodesPresenter(
     }
 
     fun clearData(callBack: () -> Unit) {
-        scope.launch {
+        scope?.launch {
             _store?.clearCodes()
             callBack()
         }
     }
 
-    @Composable
-    fun ShowNotFoundItems() {
+    val showNotFoundItems: @Composable () -> Unit = {
         val clipboard = LocalClipboardManager.current
         Dialog(
             onDismissRequest = { _notFoundItems.clear() }, DialogProperties(
@@ -483,18 +502,14 @@ class ReservedCodesPresenter(
         }
     }
 
-    @Composable
-    fun ShowSpinner() {
+    val showSpinner: @Composable () -> Unit = {
         Dialog(onDismissRequest = { _isFetching.value = false }) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularLoading()
             }
         }
     }
-
-    @Composable
-    fun WarehouseDialog() {
-        val dev = SecurityStore(ctx).device.collectAsState(initial = "")
+    val warehouseDialog: @Composable () -> Unit = {
         Dialog(
             onDismissRequest = { _needWarehouse.value = false },
             DialogProperties(dismissOnClickOutside = false)
@@ -514,7 +529,10 @@ class ReservedCodesPresenter(
                         Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(5.dp))
-                                .background(Color(0xFFFFFFFF))
+                                .background(
+                                    if (isDarkTheme) Color(0xFF313131)
+                                    else Color(0xFFFFFFFF)
+                                )
                                 .width(200.dp)
                                 .clickable { expanded.value = !expanded.value }
                                 .padding(16.dp),
@@ -549,7 +567,7 @@ class ReservedCodesPresenter(
                                     onClick = {
                                         wh.value = warehouses[n].warehouse
                                         _needWarehouse.value = false
-                                        saveCodes(wh.value, dev.value ?: "")
+                                        saveCodes(wh.value)
                                     })
                             }
                         }
@@ -559,11 +577,11 @@ class ReservedCodesPresenter(
         }
     }
 
-    private fun saveWhenDuplicate(dev: String) {
+    private fun saveWhenDuplicate() {
         try {
             _needDecision.value = false
             _isFetching.value = true
-            val api = RestAPI.create<StockApi>(deviceId = dev)
+            val api = RestAPI.create<StockApi>(deviceId = device)
             val call = api.saveStockFile(
                 StockCountBatchInput(
                     items = _barcodes!!.value!!.map {
@@ -577,7 +595,7 @@ class ReservedCodesPresenter(
                     duplicateItems = _duplicateInputs
                 )
             )
-            RestAPI.execute(call, scope, onSuccess = { r ->
+            RestAPI.execute(call, scope!!, onSuccess = { r ->
                 if (!r.result) {
                     _isFetching.value = false
                     _duplicateItems.clear()
@@ -607,10 +625,10 @@ class ReservedCodesPresenter(
         }
     }
 
-    fun saveCodes(wh: String? = null, dev: String) {
+    fun saveCodes(wh: String? = null) {
         try {
             _isFetching.value = true
-            val api = RestAPI.create<StockApi>(deviceId = dev)
+            val api = RestAPI.create<StockApi>(deviceId = device)
             var sendItem = _barcodes!!.value!!.map {
                 StockCountInput(
                     itemNumber = it.code,
@@ -628,7 +646,7 @@ class ReservedCodesPresenter(
                     duplicateItems = mutableListOf()
                 )
             )
-            RestAPI.execute(call, scope, onSuccess = { r ->
+            RestAPI.execute(call, scope!!, onSuccess = { r ->
                 if (!r.result) {
                     _isFetching.value = false
                     if (r.duplicateItems.isEmpty()) {
@@ -654,7 +672,7 @@ class ReservedCodesPresenter(
                         clearData {
                             Toast.makeText(ctx, "Stock is saved", Toast.LENGTH_LONG).show()
                         }
-                    } else scope.launch { _store!!.removeIf { c -> c.warehouse == wh } }
+                    } else scope!!.launch { _store!!.removeIf { c -> c.warehouse == wh } }
                     if (r.notFoundItems.isNotEmpty()) _notFoundItems.addAll(r.notFoundItems)
                     _isFetching.value = false
                 }
@@ -668,18 +686,7 @@ class ReservedCodesPresenter(
         }
     }
 
-    fun resetCodes(whList: List<ItemGroup>) {
-        scope.launch {
-            _store?.reset(codes = whList.flatMap { w ->
-                w.items.map { itm ->
-                    ReservedBarcodeData(
-                        code = itm.code,
-                        warehouse = w.warehouse,
-                        count = itm.count,
-                        timestamp = itm.timeStamp
-                    )
-                }
-            })
-        }
+    fun removeCode(code: String, warehouse: String) {
+        scope?.launch { _store?.remove(code, warehouse) }
     }
 }
